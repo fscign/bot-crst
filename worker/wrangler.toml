@@ -1,0 +1,12 @@
+name = "bot-crst"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+#ROUTES# (the deploy job puts your domain here when the DASH_DOMAIN variable is set)
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "KV"
+id = "KV_ID_PLACEHOLDER"

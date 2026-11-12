@@ -1,0 +1,35 @@
+name: Deploy dashboard
+on:
+  push:
+    branches: [main]
+    paths: ["worker/**"]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DASH_DOMAIN: ${{ vars.DASH_DOMAIN }}
+      INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+      DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
+      TG_TOKEN: ${{ secrets.TG_TOKEN }}
+      TG_CHAT: ${{ secrets.TG_CHAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: node deploy-prep.mjs
+      - run: npx wrangler deploy
+      - name: Set dashboard secrets
+        run: |
+          for s in INGEST_TOKEN DASH_PASSWORD TG_TOKEN TG_CHAT; do
+            v="${!s}"
+            if [ -n "$v" ]; then printf '%s' "$v" | npx wrangler secret put "$s"; else echo "$s is not set, skipping"; fi
+          done

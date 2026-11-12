@@ -1,0 +1,18 @@
+{
+  "timeframes": ["1h", "4h", "1d"],
+  "weights": {"trend": 0.30, "macd": 0.15, "rsi": 0.15, "bollinger": 0.10, "volume": 0.10, "news": 0.20},
+  "thresholds": {"buy": 30, "strong_buy": 55, "sell": -30, "strong_sell": -55},
+  "risk": {"stop_atr": 2.0, "target_atr": 3.0},
+  "account": {"size": 1000, "risk_per_trade_pct": 1.0, "max_leverage_crypto": 10, "max_leverage_stocks": 5},
+  "news": {"enabled": true, "lookback_hours": 72, "max_headlines": 15},
+  "universe": {
+    "crypto_min_volume_usd": 5000000,
+    "crypto_max": 300,
+    "us_min_dollar_volume": 20000000,
+    "us_min_price": 3,
+    "us_max": 600,
+    "stock_intraday_shortlist": 40
+  },
+  "output": {"max_signals_per_kind": 150, "news_candidates_per_kind": 30},
+  "history_check": {"min_past_signals": 5, "min_avg_move_pct": 0.2}
+}

@@ -1,0 +1,115 @@
+# European stocks scanned in addition to the US list. One Yahoo Finance ticker per line, then a comma and the name.
+# Add or remove lines freely. Tickers that Yahoo does not recognise are skipped.
+# Germany
+SAP.DE,SAP
+SIE.DE,Siemens
+ALV.DE,Allianz
+DTE.DE,Deutsche Telekom
+AIR.DE,Airbus
+MBG.DE,Mercedes-Benz
+BMW.DE,BMW
+VOW3.DE,Volkswagen
+BAS.DE,BASF
+BAYN.DE,Bayer
+MUV2.DE,Munich Re
+IFX.DE,Infineon
+DBK.DE,Deutsche Bank
+CBK.DE,Commerzbank
+RHM.DE,Rheinmetall
+ADS.DE,Adidas
+DHL.DE,DHL Group
+EOAN.DE,E.ON
+RWE.DE,RWE
+ENR.DE,Siemens Energy
+DB1.DE,Deutsche Boerse
+HEN3.DE,Henkel
+MRK.DE,Merck KGaA
+ZAL.DE,Zalando
+PAH3.DE,Porsche SE
+# France
+MC.PA,LVMH
+OR.PA,L'Oreal
+RMS.PA,Hermes
+TTE.PA,TotalEnergies
+SAN.PA,Sanofi
+AI.PA,Air Liquide
+SU.PA,Schneider Electric
+BNP.PA,BNP Paribas
+CS.PA,AXA
+SAF.PA,Safran
+EL.PA,EssilorLuxottica
+DG.PA,Vinci
+KER.PA,Kering
+GLE.PA,Societe Generale
+ACA.PA,Credit Agricole
+STLAP.PA,Stellantis
+RNO.PA,Renault
+ORA.PA,Orange
+CAP.PA,Capgemini
+HO.PA,Thales
+# Netherlands
+ASML.AS,ASML
+INGA.AS,ING
+PHIA.AS,Philips
+AD.AS,Ahold Delhaize
+ADYEN.AS,Adyen
+PRX.AS,Prosus
+HEIA.AS,Heineken
+ASM.AS,ASM International
+# Switzerland
+NESN.SW,Nestle
+NOVN.SW,Novartis
+ROG.SW,Roche
+UBSG.SW,UBS
+ZURN.SW,Zurich Insurance
+ABBN.SW,ABB
+CFR.SW,Richemont
+# United Kingdom
+SHEL.L,Shell
+AZN.L,AstraZeneca
+HSBA.L,HSBC
+ULVR.L,Unilever
+BP.L,BP
+GSK.L,GSK
+RIO.L,Rio Tinto
+BARC.L,Barclays
+LLOY.L,Lloyds
+RR.L,Rolls-Royce
+BA.L,BAE Systems
+GLEN.L,Glencore
+DGE.L,Diageo
+VOD.L,Vodafone
+# Spain and Italy
+SAN.MC,Banco Santander
+BBVA.MC,BBVA
+ITX.MC,Inditex
+IBE.MC,Iberdrola
+TEF.MC,Telefonica
+ENEL.MI,Enel
+ISP.MI,Intesa Sanpaolo
+UCG.MI,UniCredit
+ENI.MI,Eni
+RACE.MI,Ferrari
+# Nordics
+NOVO-B.CO,Novo Nordisk
+MAERSK-B.CO,Maersk
+DSV.CO,DSV
+VWS.CO,Vestas
+VOLV-B.ST,Volvo
+ERIC-B.ST,Ericsson
+ATCO-A.ST,Atlas Copco
+INVE-B.ST,Investor AB
+HM-B.ST,H&M
+SEB-A.ST,SEB
+SWED-A.ST,Swedbank
+EQNR.OL,Equinor
+DNB.OL,DNB
+NOKIA.HE,Nokia
+NESTE.HE,Neste
+NDA-FI.HE,Nordea
+# Baltics
+TKM1T.TL,Tallinna Kaubamaja
+LHV1T.TL,LHV Group
+TAL1T.TL,Tallink
+EEG1T.TL,Enefit Green
+TSM1T.TL,Tallinna Sadam
