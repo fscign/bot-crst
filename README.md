@@ -66,17 +66,18 @@ It needs a GitHub token that may start workflows in this repo, and nothing else:
 5. Run **Deploy dashboard** once more.
 Without this secret the scan still runs once an hour from GitHub's own schedule.
 
-## Paper trading test
-The **Paper test** tab runs a virtual account alongside the real signals:
-- Starts with 1,000 USD. Opens a trade on every new STRONG BUY or STRONG SELL with a good track record.
-- Stake: 1% of the balance, never less than 10 USD (so 10 USD while the balance is under 1,000).
-- Leverage as suggested on the signal. Fee 0.1% on entry and exit.
-- Closes at the trailing stop, the target, liquidation, a signal flip, or a time limit (48 bars on 1h, 42 on 4h, 20 on 1d).
-  Exits are found by replaying 5-minute bars, so a stop hit between scans is filled at the stop.
-- Shows equity, return, win rate, profit factor, drawdown, open and closed test trades.
-- **Reset the test** at the bottom of the tab starts again from 1,000 USD.
-- All rules are in the `paper` section of `scanner/config.json`.
-- `python tests/test_paper.py` checks the maths.
+## Research and the paper trading test
+`research/backtest.py` tests the bot's rules and several alternatives on years of real data.
+The findings are in `research/RESULTS.md`. In short: crypto signals and short selling lost money in the
+backtest; buying stocks on daily signals with a trailing stop is the only thing that held up.
+
+The **Paper test** tab trades a virtual 1,000 USD account using only the rules that held up:
+- US stocks daily (risk 0.75% per trade), European stocks daily (0.5%), US stocks 4h (0.25%), long only.
+- Entry when the technical score crosses +40. No leverage; all positions together at most 1.5x the account.
+- Exit: stop 2 ATR, then trailing 3 ATR behind the best price, no profit target. Also on a signal flip or time limit.
+- Set `"exit": "partial"` on a rule in `scanner/config.json` to sell half at +1R and move the stop to the entry price.
+- Telegram reports every test trade the bot opens and closes.
+- **Reset the test** at the bottom of the tab starts again. `python tests/test_paper.py` checks the maths.
 
 ## Using the dashboard
 - Signals are ranked by strength. By default only signals with a good track record on that asset are shown.
@@ -86,7 +87,7 @@ The **Paper test** tab runs a virtual account alongside the real signals:
 - When you really close it, enter the exit price and press **I closed it**.
 
 ## Telegram alerts
-- New STRONG BUY or STRONG SELL signals with a good track record (at most 8 per scan).
+- Every trade the bot opens or closes in its test account (these follow the rules that passed the backtest).
 - Any change in "What to do" for an open position: stop hit, target reached, signal flipped, near liquidation.
 
 ## Settings

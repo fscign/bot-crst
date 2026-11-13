@@ -30,7 +30,7 @@ label.chk{font-size:13px;color:var(--mute);display:flex;gap:6px;align-items:cent
 svg{display:block;width:100%;height:54px;margin:6px 0}
 .kv{display:flex;gap:16px;flex-wrap:wrap;font-size:13px}.kv span{color:var(--mute)}
 .box{font-size:12.5px;margin-top:8px;padding:7px 9px;background:var(--bg);border-radius:8px}
-.unproven{color:var(--warn)}details{font-size:13px;margin-top:8px}summary{cursor:pointer;color:var(--mute)}
+.unproven{color:var(--warn)}.bt-good{border-left:3px solid var(--buy)}.bt-bad{border-left:3px solid var(--sell);color:var(--sell)}details{font-size:13px;margin-top:8px}summary{cursor:pointer;color:var(--mute)}
 ul{margin:6px 0 0;padding-left:18px}.hl a{color:var(--ink)}
 .open{display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-top:10px;font-size:11.5px;color:var(--mute)}
 .open label{display:flex;flex-direction:column;gap:2px}
@@ -52,7 +52,7 @@ export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8"
 <button class="long">Sign in</button></form></div></main></body></html>`;
 
 const APP = `
-let S=null,F={kind:'all',tf:'all',side:'all',proven:true,view:location.hash==='#paper'?'paper':'signals'};
+let S=null,F={kind:'all',tf:'all',side:'all',proven:false,tested:true,view:location.hash==='#paper'?'paper':'signals'};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fp=p=>p==null?'':(p>=1?p.toLocaleString('en-US',{maximumFractionDigits:2}):Number(p).toPrecision(4));
@@ -87,7 +87,8 @@ function card(i,n){const up=i.score>0,hi=i.hist;
  return '<div class="sig"><h3><span>'+esc(i.symbol)+' <small>'+esc(i.name)+' &middot; '+i.tf+'</small></span>'+badge(i.label)+'</h3>'
  +'<div class="big">'+fp(i.price)+' <small>score '+(i.score>0?'+':'')+i.score+' &middot; bar '+i.time+' UTC</small></div>'+spark(i.spark,up)
  +'<div class="kv"><div><span>Stop</span> '+fp(i.stop)+'</div><div><span>Target</span> '+fp(i.target)+'</div><div><span>News</span> '+(i.news==null?'n/a':(i.news>0?'+':'')+i.news)+'</div></div>'
- +'<div class="box'+(i.proven?'':' unproven')+'">'+(i.proven?'':'Weak track record. ')+track+'</div>'
+ +(i.bt?'<div class="box '+(i.bt.v==='good'?'bt-good':i.bt.v==='bad'?'bt-bad':'unproven')+'"><b>Backtest: '+(i.bt.v==='good'?'this kind of signal made money':i.bt.v==='bad'?'this kind of signal LOST money':'no clear edge')+'.</b> Average result per trade '+(i.bt.is>0?'+':'')+i.bt.is+'R in the older period, '+(i.bt.oos>0?'+':'')+i.bt.oos+'R in the recent one ('+i.bt.n.toLocaleString('en-US')+' past trades across this market).'+(i.bt.v==='good'?' Tested this way: no leverage, stop as shown, then a stop trailing 3 ATR behind the best price, no fixed target.':'')+'</div>':'')
+ +'<div class="box'+(i.proven?'':' unproven')+'">'+(i.proven?'':'Weak track record on this asset. ')+track+'</div>'
  +'<div class="box"><b>Leverage: up to '+i.lev.x+'x.</b> Position size '+i.lev.size+' (margin '+i.lev.margin+'). Stop is '+i.lev.stop_pct+'% away; if hit, loss is about '+i.lev.risk+'.</div>'
  +'<details><summary>Why, and headlines</summary><ul>'+i.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>'
  +(i.headlines.length?'<ul class="hl">'+i.headlines.map(h=>'<li><a href="'+esc(h.l)+'" target="_blank" rel="noopener">'+esc(h.t)+'</a> ('+(h.s>0?'+':'')+h.s+')</li>').join('')+'</ul>':'')+'</details>'
@@ -100,34 +101,30 @@ function curve(pts,start){if(pts.length<2)return '<p class="sub">The equity curv
  return '<svg class="curve" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Equity over time"><line x1="0" x2="600" y1="'+y(start)+'" y2="'+y(start)+'" stroke="var(--line)" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/><path d="'+d+'" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>'
  +'<div class="sub" style="display:flex;justify-content:space-between;margin:2px 0 0"><span>'+pts[0][0].replace('T',' ')+'</span><span>'+pts[pts.length-1][0].replace('T',' ')+' UTC</span></div>';}
 function paperView(){const P=S.paper;
- if(!P||P.balance==null)return '<section class="card"><h2>Paper trading test</h2><p class="sub" style="margin:0">'+(P&&P.reset?'Reset done. ':'')+'The test starts with the next scan. The first scan only notes which signals are already strong; trades open from the second scan on, when a new strong signal appears.</p></section>';
+ if(!P||P.balance==null)return '<section class="card"><h2>Paper trading test</h2><p class="sub" style="margin:0">'+(P&&P.reset?'Reset done. ':'')+'The test starts with the next scan. The first scan only notes which signals already qualify; trades open from the second scan on, when a new one appears.</p></section>';
  const L=P.live||{},up=t=>(L[t.id]?L[t.id].upnl:t.upnl),now=t=>(L[t.id]?L[t.id].price:t.last);
  const eq=Math.round((P.balance+P.open.reduce((a,t)=>a+up(t),0))*100)/100;
  const st=P.stats,ret=(eq/P.start-1)*100,wr=st.trades?Math.round(st.wins/st.trades*100):null,
   aw=st.wins?st.gross_win/st.wins:null,al=(st.trades-st.wins)?st.gross_loss/(st.trades-st.wins):null,pf=st.gross_loss?st.gross_win/st.gross_loss:null,
-  margin=P.open.reduce((a,t)=>a+t.margin,0),R=P.rules||{};
+  margin=P.open.reduce((a,t)=>a+t.notional,0);
  const tile=(k,v,c)=>'<div class="tile"><span>'+k+'</span><b class="'+(c||'')+'">'+v+'</b></div>';
  let h='<div class="tiles">'+tile('Equity'+(P.live_time?' (live)':''),money(eq),eq>=P.start?'pos':'neg')+tile('Return',(ret>=0?'+':'')+ret.toFixed(2)+'%',ret>=0?'pos':'neg')
   +tile('Balance (closed trades)',money(P.balance))+tile('Closed trades',st.trades)+tile('Win rate',wr==null?'n/a':wr+'%')
   +tile('Avg win / avg loss',(aw==null?'n/a':money(aw))+' / '+(al==null?'n/a':money(al)))+tile('Profit factor',pf==null?'n/a':pf.toFixed(2))
   +tile('Max drawdown',st.max_dd_pct.toFixed(1)+'%')+tile('Open trades',P.open.length+' <small style="font-size:12px;color:var(--mute)">('+money(margin)+' in use)</small>')
-  +tile('Fees paid',money(st.fees))+'</div>';
+  +tile('Fees paid',money(st.fees))+tile('Avg result per trade',st.trades?((st.sum_r/st.trades)>=0?'+':'')+(st.sum_r/st.trades).toFixed(2)+'R':'n/a')+'</div>';
  h+='<section class="card"><h2>Equity</h2>'+curve(P.curve,P.start)+'</section>';
- h+='<section class="card"><h2>Open test trades</h2><p class="sub" style="margin:-4px 0 10px">'+(P.live_time?'Prices live, refreshed every 30 seconds (last '+P.live_time.slice(11,19)+' UTC). ':'')+'Stops and targets are applied at each scan, every 15 minutes, using 5-minute bars, so the fill is at the stop or target price even if it was hit in between.</p>';
- if(!P.open.length)h+='<p class="sub" style="margin:0">None right now. A trade opens when a new strong signal appears.</p>';
- else{h+='<div class="scroll"><table><thead><tr><th>Opened (UTC)</th><th>Asset</th><th>Side</th><th class="num">Stake</th><th class="num">Entry</th><th class="num">Now</th><th class="num">Stop</th><th class="num">Target</th><th class="num">Result</th><th>Closes by</th></tr></thead><tbody>';
-  for(const t of P.open.slice().reverse())h+='<tr><td>'+t.opened.slice(0,16).replace('T',' ')+'</td><td><b>'+esc(t.symbol)+'</b> '+t.tf+'</td><td>'+t.side.toUpperCase()+' '+t.lev+'x</td><td class="num">'+money(t.margin)+'</td><td class="num">'+fp(t.entry)+'</td><td class="num">'+fp(now(t))+'</td><td class="num">'+fp(t.stop)+'</td><td class="num">'+fp(t.target)+'</td><td class="num '+(up(t)>=0?'pos':'neg')+'">'+money(up(t))+(L[t.id]&&L[t.id].hit?'<br><small class="a-warn">'+L[t.id].hit+' reached, closes at next scan</small>':'')+'</td><td>'+t.until.slice(0,16).replace('T',' ')+'</td></tr>';
+ h+='<section class="card"><h2>Open test trades</h2><p class="sub" style="margin:-4px 0 10px">'+(P.live_time?'Prices live, refreshed every 30 seconds (last '+P.live_time.slice(11,19)+' UTC). ':'')+'Stops are applied at each scan, every 15 minutes, using 5-minute bars, so the fill is at the stop price even if it was hit in between.</p>';
+ if(!P.open.length)h+='<p class="sub" style="margin:0">None right now. A trade opens when a new signal of a tested kind appears (mostly when stock markets are open).</p>';
+ else{h+='<div class="scroll"><table><thead><tr><th>Opened (UTC)</th><th>Asset</th><th>Side</th><th class="num">Size</th><th class="num">Entry</th><th class="num">Now</th><th class="num">Stop</th><th class="num">Target</th><th class="num">Result</th><th>Closes by</th></tr></thead><tbody>';
+  for(const t of P.open.slice().reverse())h+='<tr><td>'+t.opened.slice(0,16).replace('T',' ')+'</td><td><b>'+esc(t.symbol)+'</b> '+t.tf+'</td><td>'+t.side.toUpperCase()+(t.partial_done?' <small>(half sold)</small>':'')+'</td><td class="num">'+money(t.notional)+'</td><td class="num">'+fp(t.entry)+'</td><td class="num">'+fp(now(t))+'</td><td class="num">'+fp(t.stop)+'</td><td class="num">'+(t.target==null?'none':fp(t.target))+'</td><td class="num '+(up(t)>=0?'pos':'neg')+'">'+money(up(t))+(L[t.id]&&L[t.id].hit?'<br><small class="a-warn">'+L[t.id].hit+' reached, closes at next scan</small>':'')+'</td><td>'+t.until.slice(0,16).replace('T',' ')+'</td></tr>';
   h+='</tbody></table></div>';}
  h+='</section>';
  const cl=P.closed.slice().sort((a,b)=>a.closed<b.closed?1:-1).slice(0,50);
- if(cl.length){h+='<section class="card"><h2>Closed test trades <small style="color:var(--mute);font-weight:400">last 50</small></h2><div class="scroll"><table><thead><tr><th>Closed (UTC)</th><th>Asset</th><th>Side</th><th class="num">Stake</th><th class="num">Entry</th><th class="num">Exit</th><th>Why</th><th class="num">Profit</th><th class="num">Balance</th></tr></thead><tbody>';
-  for(const t of cl)h+='<tr><td>'+t.closed.slice(0,16).replace('T',' ')+'</td><td><b>'+esc(t.symbol)+'</b> '+t.tf+'</td><td>'+t.side.toUpperCase()+' '+t.lev+'x</td><td class="num">'+money(t.margin)+'</td><td class="num">'+fp(t.entry)+'</td><td class="num">'+fp(t.exit)+'</td><td>'+esc(t.reason)+'</td><td class="num '+(t.pnl>=0?'pos':'neg')+'">'+money(t.pnl)+' <small>('+(t.pct>0?'+':'')+t.pct+'%)</small></td><td class="num">'+money(t.balance)+'</td></tr>';
+ if(cl.length){h+='<section class="card"><h2>Closed test trades <small style="color:var(--mute);font-weight:400">last 50</small></h2><div class="scroll"><table><thead><tr><th>Closed (UTC)</th><th>Asset</th><th>Side</th><th class="num">Size</th><th class="num">Entry</th><th class="num">Exit</th><th>Why</th><th class="num">Profit</th><th class="num">Balance</th></tr></thead><tbody>';
+  for(const t of cl)h+='<tr><td>'+t.closed.slice(0,16).replace('T',' ')+'</td><td><b>'+esc(t.symbol)+'</b> '+t.tf+'</td><td>'+t.side.toUpperCase()+'</td><td class="num">'+money(t.margin)+'</td><td class="num">'+fp(t.entry)+'</td><td class="num">'+fp(t.exit)+'</td><td>'+esc(t.reason)+'</td><td class="num '+(t.pnl>=0?'pos':'neg')+'">'+money(t.pnl)+' <small>('+(t.r>0?'+':'')+(t.r==null?t.pct+'%':t.r+'R')+')</small></td><td class="num">'+money(t.balance)+'</td></tr>';
   h+='</tbody></table></div></section>';}
- h+='<section class="card"><h2>Rules of this test</h2><ul class="rules"><li>Started '+P.started.slice(0,16).replace('T',' ')+' UTC with '+money(P.start)+' USD.</li>'
-  +'<li>A trade opens on every new STRONG BUY or STRONG SELL'+(R.require_proven?' with a good track record':'')+', at the live price. One open trade per asset.</li>'
-  +'<li>Stake: '+R.stake_pct+'% of the balance, at least '+R.min_stake+' USD, at the leverage the signal suggests.</li>'
-  +'<li>Closes at the trailing stop, the target, liquidation, a signal flip, or after '+(R.max_hold_bars?R.max_hold_bars['1h']+' bars (1h), '+R.max_hold_bars['4h']+' bars (4h), '+R.max_hold_bars['1d']+' bars (1d)':'a time limit')+'. Exits are checked on 5-minute bars.</li>'
-  +'<li>Fee: '+R.fee_pct+'% of the position on entry and on exit. No slippage or funding costs, so real results would be somewhat worse.</li></ul>'
+ h+='<section class="card"><h2>Rules of this test</h2><ul class="rules"><li>Started '+P.started.slice(0,16).replace('T',' ')+' UTC.</li>'+(P.rules_text||[]).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>'
   +'<button class="plain" id="reset" style="margin-top:8px">Reset the test</button></section>';
  return h;}
 function render(){
@@ -139,19 +136,20 @@ function render(){
  if(R.demo)h+='<div class="card demo">DEMO DATA: these prices are randomly generated, not real.</div>';
  h+=positions();
  h+='<div class="filters">'+seg('kind',[['all','All'],['crypto','Crypto'],['stock','Stocks']])+seg('tf',[['all','All'],['1h','1h'],['4h','4h'],['1d','1d']])+seg('side',[['all','Buy + Sell'],['buy','Buy'],['sell','Sell']])
- +'<label class="chk"><input type="checkbox" id="proven" style="width:auto" '+(F.proven?'checked':'')+'> only signals with a good track record</label></div>';
- const list=R.items.map((i,n)=>[i,n]).filter(([i])=>(F.kind==='all'||i.kind===F.kind)&&(F.tf==='all'||i.tf===F.tf)&&(F.side==='all'||(F.side==='buy')===(i.score>0))&&(!F.proven||i.proven))
+ +'<label class="chk"><input type="checkbox" id="tested" style="width:auto" '+(F.tested?'checked':'')+'> only kinds of signal that made money in the backtest</label>'
+ +'<label class="chk"><input type="checkbox" id="proven" style="width:auto" '+(F.proven?'checked':'')+'> good track record on this asset</label></div>';
+ const list=R.items.map((i,n)=>[i,n]).filter(([i])=>(F.kind==='all'||i.kind===F.kind)&&(F.tf==='all'||i.tf===F.tf)&&(F.side==='all'||(F.side==='buy')===(i.score>0))&&(!F.proven||i.proven)&&(!F.tested||(i.bt&&i.bt.v==='good')))
   .sort((a,b)=>Math.abs(b[0].score)-Math.abs(a[0].score));
  h+='<p class="sub">'+list.length+' signals match, strongest first'+(list.length>60?' (showing 60)':'')+'</p><div class="grid">'+list.slice(0,60).map(([i,n])=>card(i,n)).join('')+'</div>';
- h+='<p class="note">Score runs from -100 to +100. Signals use closed bars only. "Track record" looks at earlier signals of the same kind on the same asset; it is history, not a promise. Leverage is the highest that keeps liquidation at least twice as far as the stop; liquidation prices are approximate. * = live price unavailable, last known price shown. Not financial advice.</p>';
+ h+='<p class="note">Score runs from -100 to +100. Signals use closed bars only. "Backtest" is how every signal of that kind (market, timeframe, direction) did over the last years, net of fees, with a trailing stop; R is the amount risked to the stop. It is history, not a promise. Leverage is the highest that keeps liquidation at least twice as far as the stop; liquidation prices are approximate. * = live price unavailable, last known price shown. Not financial advice.</p>';
  $('#app').innerHTML=h;}
 document.addEventListener('click',async ev=>{const t=ev.target;
  if(t.dataset.f){F[t.dataset.f]=t.dataset.v;if(t.dataset.f==='view')history.replaceState(null,'',t.dataset.v==='paper'?'#paper':location.pathname);render();}
  else if(t.dataset.open){const n=t.dataset.open,i=S.results.items[n];t.disabled=true;
   await api('/api/open',{symbol:i.symbol,tf:i.tf,side:t.dataset.side,entry:$('#e'+n).value,leverage:$('#l'+n).value,size:$('#s'+n).value});await load();scrollTo({top:0,behavior:'smooth'});}
  else if(t.dataset.close){t.disabled=true;await api('/api/close',{id:t.dataset.close,exit:$('#x'+t.dataset.close).value});await load();}});
-document.addEventListener('click',async ev=>{if(ev.target.id==='reset'&&confirm('Start the paper test again from 1,000 USD? All test trades are cleared.')){ev.target.disabled=true;await api('/api/paper/reset',{});await load();}});
-document.addEventListener('change',ev=>{if(ev.target.id==='proven'){F.proven=ev.target.checked;render();}});
+document.addEventListener('click',async ev=>{if(ev.target.id==='reset'&&confirm('Start the paper test again from the beginning? All test trades are cleared.')){ev.target.disabled=true;await api('/api/paper/reset',{});await load();}});
+document.addEventListener('change',ev=>{const id=ev.target.id;if(id==='proven'||id==='tested'){F[id]=ev.target.checked;render();}});
 setInterval(()=>{const a=document.activeElement;if(!a||a.tagName!=='INPUT'||a.type==='checkbox')load();},30000);
 load();
 `;

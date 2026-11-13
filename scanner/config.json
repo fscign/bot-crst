@@ -51,15 +51,51 @@
   },
   "paper": {
     "start_balance": 1000,
-    "min_stake": 10,
-    "stake_pct": 1.0,
-    "require_proven": true,
-    "fee_pct": 0.1,
-    "max_open": 100,
-    "max_hold_bars": {
-      "1h": 48,
-      "4h": 42,
-      "1d": 20
-    }
+    "max_exposure": 1.5,
+    "max_position_pct": 20,
+    "trail_atr": 3.0,
+    "fee_pct": {
+      "crypto": 0.1,
+      "us": 0.05,
+      "eu": 0.05
+    },
+    "rules": [
+      {
+        "name": "US stocks, daily, long",
+        "markets": [
+          "us"
+        ],
+        "tf": "1d",
+        "side": "long",
+        "entry_tech": 40,
+        "exit": "trail",
+        "risk_pct": 0.75,
+        "max_hold_bars": 40
+      },
+      {
+        "name": "European stocks, daily, long",
+        "markets": [
+          "eu"
+        ],
+        "tf": "1d",
+        "side": "long",
+        "entry_tech": 40,
+        "exit": "trail",
+        "risk_pct": 0.5,
+        "max_hold_bars": 40
+      },
+      {
+        "name": "US stocks, 4h, long",
+        "markets": [
+          "us"
+        ],
+        "tf": "4h",
+        "side": "long",
+        "entry_tech": 40,
+        "exit": "trail",
+        "risk_pct": 0.25,
+        "max_hold_bars": 84
+      }
+    ]
   }
 }

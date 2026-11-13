@@ -88,15 +88,15 @@ async function livePaper(raw) {
   const P = JSON.parse(raw);
   if (!P.open || !P.open.length) return raw;
   const prices = await livePrices(P.open);
-  const fee = (P.rules?.fee_pct ?? 0.1) / 100;
   P.live = {};
   for (const t of P.open) {
     const price = prices[t.symbol];
     if (!price) continue;
     const side = t.side === "long" ? 1 : -1;
     const move = side * (price / t.entry - 1);
-    const upnl = Math.max(-t.margin, t.notional * move - t.notional * fee * (1 + price / t.entry));
-    const hit = (price - t.stop) * side <= 0 ? "stop" : (price - t.target) * side >= 0 ? "target" : null;
+    const fee = (t.fee_pct ?? 0.1) / 100;
+    const upnl = t.notional * move - t.notional * fee * (1 + price / t.entry);
+    const hit = (price - t.stop) * side <= 0 ? "stop" : (t.target != null && (price - t.target) * side >= 0) ? "target" : null;
     P.live[t.id] = { price, upnl: Math.round(upnl * 100) / 100, hit };
   }
   P.live_time = new Date().toISOString().slice(0, 19) + "Z";
@@ -162,8 +162,6 @@ async function ingest(request, env) {
   const paperIn = data.paper;
   delete data.paper;
   const text = JSON.stringify(data);
-  const meta = await getJSON(env, "meta", {});
-
   const positions = await getJSON(env, "positions", []);
   const watch = { ...(data.watch || {}) };
   for (const p of positions.filter((x) => x.status === "open")) {
@@ -173,26 +171,29 @@ async function ingest(request, env) {
       if (it) watch[key] = { label: it.label, score: it.score, atr: it.atr, price: it.price, time: it.time };
     }
   }
-  // Telegram: only NEW strong signals with a good track record, a few per scan
-  const strongNow = data.items.filter((i) => i.proven && i.label.startsWith("STRONG"));
-  const keysNow = strongNow.map((i) => `${i.symbol}|${i.tf}|${i.label}`);
-  const before = meta.strong || null;
   const writes = [env.KV.put("results", text),
-    putJSON(env, "meta", { ...meta, watch, risk: data.risk || { stop_atr: 2, target_atr: 3 }, strong: keysNow })];
+    putJSON(env, "meta", { watch, risk: data.risk || { stop_atr: 2, target_atr: 3 } })];
+  const notes = [];
   if (paperIn) {
     // ignore results from a scan that started before the test was reset
     const current = await getJSON(env, "paper", null);
-    if (!current || !current.epoch || current.epoch === paperIn.epoch) writes.push(putJSON(env, "paper", paperIn));
-  }
-  await Promise.all(writes);
-  if (before && !data.demo) {
-    const fresh = strongNow.filter((i) => !before.includes(`${i.symbol}|${i.tf}|${i.label}`)).slice(0, 8);
-    if (fresh.length) {
-      const lines = fresh.map((i) =>
-        `${i.label} ${i.symbol} ${i.tf} @ ${fmt(i.price)} (score ${i.score})\n  stop ${fmt(i.stop)}, target ${fmt(i.target)}, up to ${i.lev.x}x\n  past signals: ${i.hist.n}, avg ${i.hist.avg}% in ${i.hist.bars} bars`);
-      await telegram(env, "New strong signals\n\n" + lines.join("\n\n"));
+    if (!current || !current.epoch || current.epoch === paperIn.epoch) {
+      writes.push(putJSON(env, "paper", paperIn));
+      // Telegram: what the bot itself just did in the test account
+      if (current && current.version === paperIn.version && !data.demo) {
+        const seen = new Set([...(current.open || []), ...(current.closed || [])].map((t) => t.id));
+        const wasClosed = new Set((current.closed || []).map((t) => t.id));
+        for (const t of (paperIn.open || []).filter((t) => !seen.has(t.id)).slice(0, 8)) {
+          notes.push(`OPENED ${t.side.toUpperCase()} ${t.symbol} (${t.name}) ${t.tf} @ ${fmt(t.entry)}\n  size ${fmt(t.size0)} USD, risk ${fmt(t.risk)} USD, stop ${fmt(t.stop)} (trailing)\n  rule: ${t.rule}`);
+        }
+        for (const t of (paperIn.closed || []).filter((t) => !wasClosed.has(t.id)).slice(-8)) {
+          notes.push(`CLOSED ${t.symbol} ${t.tf} @ ${fmt(t.exit)}: ${t.pnl >= 0 ? "+" : ""}${t.pnl} USD (${t.r >= 0 ? "+" : ""}${t.r}R), ${t.reason}\n  test balance ${fmt(t.balance)} USD`);
+        }
+      }
     }
   }
+  await Promise.all(writes);
+  if (notes.length) await telegram(env, "Bot test account\n\n" + notes.join("\n\n"));
   await checkPositions(env);
   return json({ ok: true, items: data.items.length });
 }

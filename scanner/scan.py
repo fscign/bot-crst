@@ -225,6 +225,37 @@ def fetch_news(symbol: str, name: str, kind: str, cfg: dict, fng: int | None) ->
 
 
 # --------------------------------------------------------------------------
+# What the research backtest says about each kind of signal
+# --------------------------------------------------------------------------
+def load_verdicts() -> dict:
+    """(market, tf, side, family) -> how signals of that kind did in research/results.csv
+    (trailing-stop exit, no extra filter), in both halves of the history."""
+    path = ROOT / "research" / "results.csv"
+    if not path.exists():
+        return {}
+    r = pd.read_csv(path)
+    r = r[(r["exit"] == "trail") & (r["filter"] == "none") & r["family"].isin(["score40", "score55"])]
+    out = {}
+    for _, x in r.iterrows():
+        both_up = x.is_avg_r > 0 and x.oos_avg_r > 0
+        if both_up and x.is_t >= 2 and x.oos_t >= 1.8:
+            v = "good"
+        elif x.oos_avg_r < 0 and (x.is_avg_r < 0 or x.oos_t <= -1.8):
+            v = "bad"
+        else:
+            v = "unclear"
+        out[(x.market, x.tf, x.side, x.family)] = {"v": v, "is": round(float(x.is_avg_r), 2),
+                                                   "oos": round(float(x.oos_avg_r), 2),
+                                                   "n": int(x.is_n + x.oos_n)}
+    return out
+
+
+def verdict_for(it: dict, verdicts: dict) -> dict | None:
+    fam = "score55" if it["label"].startswith("STRONG") else "score40"
+    return verdicts.get((paper.market_of(it), it["tf"], "long" if it["score"] > 0 else "short", fam))
+
+
+# --------------------------------------------------------------------------
 # Live prices and 5-minute bars (used by the paper trading test)
 # --------------------------------------------------------------------------
 def live_price(symbol: str, kind: str) -> float | None:
@@ -401,9 +432,12 @@ def main() -> None:
                     news[s] = res
 
     # ---- build the output: actionable signals, ranked, plus watched positions
-    items, watched, labels = [], {}, {}
+    items, watched, labels, everything = [], {}, {}, []
+    verdicts = load_verdicts()
     for s, n, k, fr in scored:
         it = build_item(s, n, k, fr, news.get(s), cfg)
+        it["bt"] = verdict_for(it, verdicts) if it["label"] != "HOLD" else None
+        everything.append(it)
         labels[(s, fr["tf"])] = it["label"]
         if args.demo:
             _demo_last[s] = it["price"]
@@ -415,7 +449,7 @@ def main() -> None:
 
     # ---- paper trading test
     try:
-        pstate = paper.run(paper_state, items, labels, paper.settings(cfg),
+        pstate = paper.run(paper_state, everything, labels, paper.settings(cfg),
                            demo_bars_since if args.demo else bars_since,
                            (lambda s, k: _demo_last.get(s)) if args.demo else live_price)
     except Exception as e:
@@ -425,7 +459,7 @@ def main() -> None:
         pstate = None
     out_items = []
     for kind in ("crypto", "stock"):
-        ki = sorted((i for i in items if i["kind"] == kind), key=lambda i: (not i["proven"], -abs(i["score"])))
+        ki = sorted((i for i in items if i["kind"] == kind), key=lambda i: ((i["bt"] or {}).get("v") != "good", not i["proven"], -abs(i["score"])))
         out_items += ki[: cfg["output"]["max_signals_per_kind"]]
 
     payload = {"generated": datetime.now(UTC).strftime("%Y-%m-%d %H:%M"), "demo": args.demo,
