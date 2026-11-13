@@ -86,21 +86,41 @@ async function livePrices(list) {
 async function livePaper(raw) {
   if (!raw) return "null";
   const P = JSON.parse(raw);
-  if (!P.open || !P.open.length) return raw;
-  const prices = await livePrices(P.open);
-  P.live = {};
-  for (const t of P.open) {
-    const price = prices[t.symbol];
-    if (!price) continue;
-    const side = t.side === "long" ? 1 : -1;
-    const move = side * (price / t.entry - 1);
-    const fee = (t.fee_pct ?? 0.1) / 100;
-    const upnl = t.notional * move - t.notional * fee * (1 + price / t.entry);
-    const hit = (price - t.stop) * side <= 0 ? "stop" : (t.target != null && (price - t.target) * side >= 0) ? "target" : null;
-    P.live[t.id] = { price, upnl: Math.round(upnl * 100) / 100, hit };
+  const accounts = [P, ...Object.values(P.accounts || {})].filter((a) => a && Array.isArray(a.open));
+  const all = accounts.flatMap((a) => a.open);
+  if (!all.length) return raw;
+  const prices = await livePrices(all);
+  for (const A of accounts) {
+    A.live = {};
+    for (const t of A.open) {
+      const price = prices[t.symbol];
+      if (!price) continue;
+      const side = t.side === "long" ? 1 : -1;
+      const move = side * (price / t.entry - 1);
+      const fee = (t.fee_pct ?? 0.1) / 100;
+      const upnl = t.notional * move - t.notional * fee * (1 + price / t.entry);
+      const hit = (price - t.stop) * side <= 0 ? "stop" : (t.target != null && (price - t.target) * side >= 0) ? "target" : null;
+      A.live[t.id] = { price, upnl: Math.round(upnl * 100) / 100, hit };
+    }
   }
   P.live_time = new Date().toISOString().slice(0, 19) + "Z";
   return JSON.stringify(P);
+}
+
+// Telegram lines for trades an account opened or closed since the previous scan
+function tradeNotes(before, now) {
+  if (!before || !now || before.balance == null || before.version !== now.version) return [];
+  const tag = `[${now.title || "Test account"}]`;
+  const seen = new Set([...(before.open || []), ...(before.closed || [])].map((t) => t.id));
+  const wasClosed = new Set((before.closed || []).map((t) => t.id));
+  const out = [];
+  for (const t of (now.open || []).filter((t) => !seen.has(t.id)).slice(0, 8)) {
+    out.push(`${tag} OPENED ${t.side.toUpperCase()} ${t.symbol} (${t.name}) ${t.tf} @ ${fmt(t.entry)}\n  size ${fmt(t.size0)} USD, risk ${fmt(t.risk)} USD, stop ${fmt(t.stop)} (trailing)\n  rule: ${t.rule}`);
+  }
+  for (const t of (now.closed || []).filter((t) => !wasClosed.has(t.id)).slice(-8)) {
+    out.push(`${tag} CLOSED ${t.symbol} ${t.tf} @ ${fmt(t.exit)}: ${t.pnl >= 0 ? "+" : ""}${t.pnl} USD (${t.r >= 0 ? "+" : ""}${t.r}R), ${t.reason}\n  balance ${fmt(t.balance)} USD`);
+  }
+  return out;
 }
 
 // ---- what to do with an open position ---------------------------------------
@@ -179,21 +199,15 @@ async function ingest(request, env) {
     const current = await getJSON(env, "paper", null);
     if (!current || !current.epoch || current.epoch === paperIn.epoch) {
       writes.push(putJSON(env, "paper", paperIn));
-      // Telegram: what the bot itself just did in the test account
-      if (current && current.version === paperIn.version && !data.demo) {
-        const seen = new Set([...(current.open || []), ...(current.closed || [])].map((t) => t.id));
-        const wasClosed = new Set((current.closed || []).map((t) => t.id));
-        for (const t of (paperIn.open || []).filter((t) => !seen.has(t.id)).slice(0, 8)) {
-          notes.push(`OPENED ${t.side.toUpperCase()} ${t.symbol} (${t.name}) ${t.tf} @ ${fmt(t.entry)}\n  size ${fmt(t.size0)} USD, risk ${fmt(t.risk)} USD, stop ${fmt(t.stop)} (trailing)\n  rule: ${t.rule}`);
-        }
-        for (const t of (paperIn.closed || []).filter((t) => !wasClosed.has(t.id)).slice(-8)) {
-          notes.push(`CLOSED ${t.symbol} ${t.tf} @ ${fmt(t.exit)}: ${t.pnl >= 0 ? "+" : ""}${t.pnl} USD (${t.r >= 0 ? "+" : ""}${t.r}R), ${t.reason}\n  test balance ${fmt(t.balance)} USD`);
-        }
+      // Telegram: what the bot itself just did in its test accounts
+      if (current && !data.demo) {
+        notes.push(...tradeNotes(current, paperIn));
+        for (const [name, acc] of Object.entries(paperIn.accounts || {})) notes.push(...tradeNotes((current.accounts || {})[name], acc));
       }
     }
   }
   await Promise.all(writes);
-  if (notes.length) await telegram(env, "Bot test account\n\n" + notes.join("\n\n"));
+  if (notes.length) await telegram(env, notes.join("\n\n"));
   await checkPositions(env);
   return json({ ok: true, items: data.items.length });
 }

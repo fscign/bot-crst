@@ -96,6 +96,41 @@
         "risk_pct": 0.25,
         "max_hold_bars": 84
       }
-    ]
-  }
+    ],
+    "accounts": {
+      "crypto": {
+        "title": "Crypto (experiment)",
+        "intro": "Experimental account. The research found no crypto rule with a proven edge; this trades the least-bad one with small risk so it can be watched live. Expect roughly break-even.",
+        "start_balance": 1000,
+        "max_exposure": 1.0,
+        "max_position_pct": 15,
+        "trail_atr": 5.0,
+        "fee_pct": {
+          "crypto": 0.1,
+          "us": 0.05,
+          "eu": 0.05
+        },
+        "rules": [
+          {
+            "name": "Crypto, daily volatility breakout, long",
+            "markets": [
+              "crypto"
+            ],
+            "tf": "1d",
+            "side": "long",
+            "trigger": "vol_breakout",
+            "max_volume_rank": 80,
+            "requires": [],
+            "exit": "trail",
+            "stop_atr": 3.0,
+            "trail_atr": 5.0,
+            "risk_pct": 0.5,
+            "max_hold_bars": 120,
+            "flip_exit": false
+          }
+        ]
+      }
+    }
+  },
+  "context_note": ""
 }

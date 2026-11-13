@@ -107,4 +107,40 @@ assert s["closed"][-1]["pnl"] == -0.2
 s = scan({"epoch": "abc", "balance": 950, "open": [], "closed": []}, [item("AAA")], T0, C)
 assert s["version"] == 2 and s["balance"] == 1000 and s["epoch"] == "abc"
 
+# extra account: crypto volatility breakout, needs a context flag, wide stop, ignores signal flips
+ACC = {"title": "Crypto (experiment)", "start_balance": 1000, "max_position_pct": 15, "max_exposure": 1.0,
+       "fee_pct": {"crypto": 0.0, "us": 0.0, "eu": 0.0},
+       "rules": [{"name": "vb", "markets": ["crypto"], "tf": "1d", "side": "long", "trigger": "vol_breakout",
+                  "max_volume_rank": 80, "requires": ["btc_above_ema100"], "exit": "trail", "stop_atr": 3.0,
+                  "trail_atr": 5.0, "risk_pct": 0.5, "max_hold_bars": 120, "flip_exit": False}]}
+A = paper.settings({"risk": {"stop_atr": 2.0}}, ACC)
+
+
+def coin(sym, setups=("vol_breakout",), rank=5):
+    return {**item(sym, tech=10, label="HOLD", kind="crypto"), "setups": list(setups), "rank": rank}
+
+
+def scan_ctx(state, items, t, flags, **kw):
+    return paper.run(state, items, kw.get("labels", {}), A, lambda s, k, since: pd.DataFrame(),
+                     lambda s, k: kw.get("price", 100.0), t, context=flags)
+
+
+s = scan_ctx(None, [], T0, {"btc_above_ema100": True})
+# not opened: gate off
+s = scan_ctx(s, [coin("XUSDT")], T0, {"btc_above_ema100": False})
+assert s["open"] == []
+# not opened: no setup, rank too low, or a stock
+s = scan_ctx(s, [], T0 + timedelta(days=1), {"btc_above_ema100": True})
+s = scan_ctx(s, [coin("YUSDT", setups=()), coin("ZUSDT", rank=200), {**item("AAPL"), "setups": ["vol_breakout"]}],
+             T0 + timedelta(days=1), {"btc_above_ema100": True})
+assert s["open"] == []
+# opened: stop 3 ATR away, risk 0.5% of the account, trailing 5 ATR, title set
+s = scan_ctx(s, [coin("XUSDT")], T0 + timedelta(days=2), {"btc_above_ema100": True})
+tr = s["open"][0]
+assert tr["stop"] == 97 and tr["risk"] == 4.5 and tr["notional"] == 150 and tr["trail_atr"] == 5.0, tr
+assert s["title"] == "Crypto (experiment)" and "Bitcoin is above its 100-day average" in s["rules_text"][1]
+# a SELL label does not close it (flip_exit off)
+s = scan_ctx(s, [coin("XUSDT")], T0 + timedelta(days=3), {"btc_above_ema100": True}, labels={("XUSDT", "1d"): "SELL"})
+assert len(s["open"]) == 1
+
 print("All paper trading checks passed")

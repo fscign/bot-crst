@@ -32,6 +32,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import signal_bot as sb  # indicators, scoring, news, leverage (shared with the local version)
 import paper
+import context as ctxmod
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -187,6 +188,17 @@ def sig(x: float, n: int = 6) -> float:
     return float(f"{x:.{n}g}")
 
 
+def setups(d: pd.DataFrame) -> list[str]:
+    """Named chart setups on the last closed bar (used by rules that do not go by the score)."""
+    out = []
+    last, prev_atr = d.iloc[-1], d["atr"].iloc[-2]
+    rng = last["high"] - last["low"]
+    ema50 = last.get("ema50", np.nan)
+    if rng > 2 * prev_atr and last["close"] > last["low"] + 0.75 * rng and last["close"] > ema50:
+        out.append("vol_breakout")
+    return out
+
+
 def build_item(symbol: str, name: str, kind: str, fr: dict, news: dict | None, cfg: dict) -> dict:
     d, last = fr["d"], fr["d"].iloc[-1]
     ns, wn = (news or {}).get("score"), cfg["weights"].get("news", 0)
@@ -212,6 +224,7 @@ def build_item(symbol: str, name: str, kind: str, fr: dict, news: dict | None, c
         "headlines": [{"t": n["title"][:140], "l": n["link"], "s": round(n["sentiment"], 2)}
                       for n in (news or {}).get("items", [])[:4]],
         "spark": [sig(v, 5) for v in d["close"].tail(60).tolist()],
+        "setups": setups(d),
     }
 
 
@@ -372,6 +385,7 @@ def main() -> None:
     watch_syms = {w["symbol"] for w in watch}
 
     scored: list[tuple[str, str, str, dict]] = []      # (symbol, name, kind, frame)
+    crypto_rank: dict[str, int] = {}                   # 1 = most traded pair
     stats = {"crypto": 0, "stocks": 0, "source": "demo" if args.demo else ""}
     fng = None
 
@@ -383,11 +397,13 @@ def main() -> None:
             if fr:
                 scored.append((s, crypto.get(s) or stocks[s], kind, fr))
         stats["crypto"], stats["stocks"] = len(crypto), len(stocks)
+        crypto_rank = {s: i + 1 for i, s in enumerate(crypto)}
     else:
         # ---- crypto: every liquid USDT pair, all timeframes
         source, uni = crypto_universe(cfg)
         stats["source"], stats["crypto"] = source, len(uni)
         print(f"Crypto: {len(uni)} pairs from {source}")
+        crypto_rank = {r["symbol"]: i + 1 for i, r in enumerate(uni)}
         jobs = [(r, tf) for r in uni for tf in cfg["timeframes"]]
         with ThreadPoolExecutor(8 if source == "binance" else 3) as ex:
             dfs = list(ex.map(lambda j: crypto_frame(source, j[0], j[1]), jobs))
@@ -437,6 +453,7 @@ def main() -> None:
     for s, n, k, fr in scored:
         it = build_item(s, n, k, fr, news.get(s), cfg)
         it["bt"] = verdict_for(it, verdicts) if it["label"] != "HOLD" else None
+        it["rank"] = crypto_rank.get(s)
         everything.append(it)
         labels[(s, fr["tf"])] = it["label"]
         if args.demo:
@@ -447,11 +464,37 @@ def main() -> None:
         if it["label"] != "HOLD":
             items.append(it)
 
-    # ---- paper trading test
+    # ---- market context (Fear & Greed, Bitcoin trend, stocks, dollar, rates, calendar)
+    ctx = None
+    if args.demo:
+        ctx = {"day": "demo", "flags": {"btc_above_ema100": True, "spx_above_200d": True, "vix_below_20": False},
+               "values": {"fear_greed": 38, "vix": 21.4}, "labels": ctxmod.LABELS, "failed": [],
+               "events": [{"time": "2026-11-18 13:30", "country": "USD", "title": "CPI m/m (demo)",
+                           "forecast": "0.2%", "previous": "0.3%"}]}
+    else:
+        try:
+            ctx = ctxmod.snapshot()
+            if ctx["failed"]:
+                print("Context sources unavailable:", "; ".join(ctx["failed"]))
+        except Exception as e:
+            print(f"Market context unavailable this scan: {e}")
+    flags = (ctx or {}).get("flags", {})
+
+    # ---- paper trading test: the main account, then any extra accounts
     try:
-        pstate = paper.run(paper_state, everything, labels, paper.settings(cfg),
-                           demo_bars_since if args.demo else bars_since,
-                           (lambda s, k: _demo_last.get(s)) if args.demo else live_price)
+        bars_fn = demo_bars_since if args.demo else bars_since
+        price_fn = (lambda s, k: _demo_last.get(s)) if args.demo else live_price
+        extra_before = (paper_state or {}).get("accounts", {})
+        pstate = paper.run(paper_state, everything, labels, paper.settings(cfg), bars_fn, price_fn, context=flags)
+        pstate["accounts"] = {}
+        for name, acc in cfg.get("paper", {}).get("accounts", {}).items():
+            try:
+                pstate["accounts"][name] = paper.run(extra_before.get(name), everything, labels,
+                                                     paper.settings(cfg, acc), bars_fn, price_fn, context=flags)
+            except Exception as e:                       # keep this account as it was, do not lose the others
+                print(f"Paper account '{name}' skipped this scan: {e}")
+                if extra_before.get(name):
+                    pstate["accounts"][name] = extra_before[name]
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -466,6 +509,7 @@ def main() -> None:
                "stats": {**stats, "frames": len(scored), "signals": len(items), "fear_greed": fng,
                          "seconds": round(time.time() - t0)},
                "risk": cfg["risk"], "account": cfg["account"], "thresholds": cfg["thresholds"],
+               "context": ({**ctx, "note": cfg.get("context_note", "")} if ctx else None),
                "items": out_items, "watch": watched}
     (ROOT / "data").mkdir(exist_ok=True)
     (ROOT / "data" / "latest.json").write_text(json.dumps(payload), encoding="utf-8")

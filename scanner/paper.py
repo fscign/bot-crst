@@ -32,7 +32,14 @@ UTC = timezone.utc
 TF = {"1h": timedelta(hours=1), "4h": timedelta(hours=4), "1d": timedelta(days=1)}
 VERSION = 2
 
+CONTEXT_LABELS = {
+    "btc_above_ema100": "Bitcoin is above its 100-day average",
+    "btc_above_ema200": "Bitcoin is above its 200-day average",
+}
+
 DEFAULTS = {
+    "title": "Stocks (tested rules)",
+    "intro": "Only kinds of signal that made money in the research backtest are traded; everything else is ignored.",
     "start_balance": 1000,
     "max_exposure": 1.5,            # total open positions, as a multiple of the account
     "max_position_pct": 20,         # one position, % of the account
@@ -64,9 +71,9 @@ def market_of(it: dict) -> str:
     return "eu" if "." in it["symbol"] else "us"
 
 
-def settings(main_cfg: dict) -> dict:
-    """Paper settings from config.json merged over the defaults, plus the stop distance."""
-    user = main_cfg.get("paper", {})
+def settings(main_cfg: dict, account: dict | None = None) -> dict:
+    """Settings for the main account (config.json "paper"), or for one extra account, merged over the defaults."""
+    user = account if account is not None else main_cfg.get("paper", {})
     cfg = {**DEFAULTS, **user, "stop_atr": main_cfg["risk"]["stop_atr"]}
     cfg["fee_pct"] = {**DEFAULTS["fee_pct"], **user.get("fee_pct", {})} if isinstance(user.get("fee_pct", {}), dict) \
         else {m: user["fee_pct"] for m in DEFAULTS["fee_pct"]}
@@ -88,6 +95,13 @@ def rule_for(it: dict, cfg: dict) -> dict | None:
     m = market_of(it)
     for rule in cfg["rules"]:
         if m in rule["markets"] and it["tf"] == rule["tf"]:
+            if rule.get("max_volume_rank") and (it.get("rank") or 10**9) > rule["max_volume_rank"]:
+                continue                                  # only the most traded coins, as in the research
+            trigger = rule.get("trigger", "tech")
+            if trigger != "tech":                         # a named chart setup found by the scanner
+                if trigger in it.get("setups", []):
+                    return rule
+                continue
             tech = it.get("tech", it["score"])
             if (rule["side"] == "long" and tech >= rule["entry_tech"]) or \
                (rule["side"] == "short" and tech <= -rule["entry_tech"]):
@@ -109,7 +123,7 @@ def equity_of(state: dict) -> float:
 # --------------------------------------------------------------------------
 # Opening
 # --------------------------------------------------------------------------
-def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime) -> list[dict]:
+def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime, context: dict | None = None) -> list[dict]:
     hits = {}
     for it in items:
         rule = rule_for(it, cfg)
@@ -126,10 +140,12 @@ def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime) 
         it, rule = hits[key]
         if it["symbol"] in held:
             continue
+        if not all((context or {}).get(flag) for flag in rule.get("requires", [])):
+            continue                                      # the market conditions this rule needs are not met
         equity = equity_of(state)
         price = price_now(it["symbol"], it["kind"]) or it["price"]
         atr = float(it["atr"])
-        stop_dist = cfg["stop_atr"] * atr
+        stop_dist = rule.get("stop_atr", cfg["stop_atr"]) * atr
         if not (price > 0 and stop_dist > 0):
             continue
         risk_money = equity * rule["risk_pct"] / 100
@@ -147,7 +163,8 @@ def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime) 
             "risk": round(notional * stop_dist / price, 2), "atr": atr, "fee_pct": cfg["fee_pct"][market_of(it)],
             "stop0": price - side * stop_dist, "stop": price - side * stop_dist, "target": None,
             "partial_at": price + side * stop_dist if rule["exit"] == "partial" else None,
-            "banked": 0.0, "best": price,
+            "banked": 0.0, "best": price, "trail_atr": rule.get("trail_atr", cfg["trail_atr"]),
+            "flip_exit": rule.get("flip_exit", True),
             "until": now_iso(t + TF[it["tf"]] * rule["max_hold_bars"]),
         }
         state["open"].append(tr)
@@ -197,7 +214,7 @@ def replay(state: dict, tr: dict, bars: pd.DataFrame, cfg: dict) -> tuple[str, f
     """Walk through 5-minute bars since the last check. Returns (reason, price, time) on exit."""
     side = 1 if tr["side"] == "long" else -1
     until = parse(tr["until"])
-    trail = cfg["trail_atr"] * tr["atr"]
+    trail = tr.get("trail_atr", cfg["trail_atr"]) * tr["atr"]
     for t, b in bars.iterrows():
         o, h, l, c = b["open"], b["high"], b["low"], b["close"]
         worst, best = (l, h) if side == 1 else (h, l)
@@ -238,7 +255,7 @@ def update_open(state: dict, labels: dict, cfg: dict, bars_since, price_now, t: 
         if exit_ is None:
             lab = labels.get((tr["symbol"], tr["tf"]))
             side = 1 if tr["side"] == "long" else -1
-            if lab and ((side == 1 and "SELL" in lab) or (side == -1 and "BUY" in lab)):
+            if tr.get("flip_exit", True) and lab and ((side == 1 and "SELL" in lab) or (side == -1 and "BUY" in lab)):
                 exit_ = (f"signal flipped to {lab}", price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
             elif t >= parse(tr["until"]):
                 exit_ = ("time limit", price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
@@ -253,29 +270,42 @@ def update_open(state: dict, labels: dict, cfg: dict, bars_since, price_now, t: 
 
 
 def rules_text(cfg: dict) -> list[str]:
-    out = [f"Start: {cfg['start_balance']:,.0f} USD. Only kinds of signal that made money in the research backtest "
-           f"are traded; everything else is ignored."]
+    out = [f"Start: {cfg['start_balance']:,.0f} USD. {cfg['intro']}"]
+    flips = False
     for r in cfg["rules"]:
-        how = ("stop 2 ATR, then trailing 3 ATR behind the best price, no profit target" if r["exit"] == "trail"
-               else "half is sold at +1R and the stop moves to the entry price, the rest trails 3 ATR")
-        out.append(f"{r['name']}: enter when the technical score crosses {r['entry_tech']:+d}; risk "
-                   f"{r['risk_pct']}% of the account per trade; exit: {how}; time limit {r['max_hold_bars']} bars.")
+        stop, trail = r.get("stop_atr", cfg["stop_atr"]), r.get("trail_atr", cfg["trail_atr"])
+        how = (f"stop {stop:g} ATR, then trailing {trail:g} ATR behind the best price, no profit target"
+               if r["exit"] == "trail" else
+               f"half is sold at +1R and the stop moves to the entry price, the rest trails {trail:g} ATR")
+        if r.get("trigger", "tech") == "vol_breakout":
+            entry = ("enter after a bar more than twice its normal range that closes near its high, "
+                     "above the 50-bar average")
+        else:
+            entry = f"enter when the technical score crosses {r['entry_tech']:+d}"
+        need = [CONTEXT_LABELS.get(f, f) for f in r.get("requires", [])]
+        if need:
+            entry += ", only while " + " and ".join(need)
+        flips = flips or r.get("flip_exit", True)
+        out.append(f"{r['name']}: {entry}; risk {r['risk_pct']}% of the account per trade; exit: {how}; "
+                   f"time limit {r['max_hold_bars']} bars.")
     out.append(f"No leverage per position. All open positions together are capped at {cfg['max_exposure']}x the "
                f"account, one position at {cfg['max_position_pct']}% of it. One open trade per asset.")
-    out.append("Also closes when the signal flips to SELL. Exits are checked on 5-minute bars. Fees: "
-               + ", ".join(f"{m} {v}%" for m, v in cfg["fee_pct"].items())
-               + " per side. No slippage or overnight gaps beyond what the bars show.")
+    out.append(("Also closes when the signal flips to SELL. " if flips else "")
+               + "Exits are checked on 5-minute bars. Fees: "
+               + ", ".join(f"{m} {v}%" for m, v in cfg["fee_pct"].items()
+                           if any(m in r["markets"] for r in cfg["rules"]))
+               + " per side. No slippage or gaps beyond what the bars show.")
     return out
 
 
 def run(state: dict | None, items: list[dict], labels: dict, cfg: dict, bars_since, price_now,
-        t: datetime | None = None) -> dict:
+        t: datetime | None = None, context: dict | None = None) -> dict:
     """One scan's worth of paper trading. Returns the new state."""
     t = t or datetime.now(UTC)
     if not state or "balance" not in state or state.get("version") != VERSION:
         state = fresh_state(cfg, (state or {}).get("epoch"))
     closed = update_open(state, labels, cfg, bars_since, price_now, t)
-    opened = open_new(state, items, cfg, price_now, t)
+    opened = open_new(state, items, cfg, price_now, t, context)
     for tr in state["open"]:
         tr["upnl"] = round(unrealized(tr), 2)
     equity = round(state["balance"] + sum(tr["upnl"] for tr in state["open"]), 2)
@@ -286,6 +316,7 @@ def run(state: dict | None, items: list[dict], labels: dict, cfg: dict, bars_sin
     state["updated"] = now_iso(t)
     state["curve"] = (state["curve"] + [[now_iso(t)[:16], equity]])[-700:]
     state["rules_text"] = rules_text(cfg)
-    print(f"Paper test: opened {len(opened)}, closed {len(closed)}, open {len(state['open'])}, "
+    state["title"] = cfg["title"]
+    print(f"Paper test [{cfg['title']}]: opened {len(opened)}, closed {len(closed)}, open {len(state['open'])}, "
           f"balance {state['balance']:.2f}, equity {equity:.2f}")
     return state
