@@ -59,7 +59,6 @@ ASM.AS,ASM International
 # Switzerland
 NESN.SW,Nestle
 NOVN.SW,Novartis
-ROG.SW,Roche
 UBSG.SW,UBS
 ZURN.SW,Zurich Insurance
 ABBN.SW,ABB
@@ -111,5 +110,4 @@ NDA-FI.HE,Nordea
 TKM1T.TL,Tallinna Kaubamaja
 LHV1T.TL,LHV Group
 TAL1T.TL,Tallink
-EEG1T.TL,Enefit Green
 TSM1T.TL,Tallinna Sadam
