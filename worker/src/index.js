@@ -58,6 +58,51 @@ async function livePrice(pos) {
   return null;
 }
 
+// Many prices at once, for the paper test: one request covers every crypto pair,
+// stocks are fetched one by one (capped, the free plan allows 50 requests per page load).
+async function livePrices(list) {
+  const ua = { "user-agent": "Mozilla/5.0 (signal-bot)" };
+  const out = {};
+  const crypto = list.filter((x) => x.kind === "crypto"), stocks = [...new Set(list.filter((x) => x.kind !== "crypto").map((x) => x.symbol))];
+  if (crypto.length) {
+    try {
+      let r = await fetch("https://data-api.binance.vision/api/v3/ticker/price", { headers: ua });
+      if (r.ok) for (const t of await r.json()) out[t.symbol] = parseFloat(t.price);
+      else {
+        r = await fetch("https://api.kucoin.com/api/v1/market/allTickers", { headers: ua });
+        if (r.ok) for (const t of (await r.json()).data.ticker) if (t.symbol.endsWith("-USDT") && t.last) out[t.symbol.replace("-USDT", "USDT")] = parseFloat(t.last);
+      }
+    } catch (e) { console.log("crypto prices failed", e.message); }
+  }
+  await Promise.all(stocks.slice(0, 35).map(async (s) => {
+    try {
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(s)}?interval=1m&range=1d`, { headers: ua });
+      if (r.ok) out[s] = (await r.json()).chart.result[0].meta.regularMarketPrice;
+    } catch (e) { console.log("stock price failed", s, e.message); }
+  }));
+  return out;
+}
+
+async function livePaper(raw) {
+  if (!raw) return "null";
+  const P = JSON.parse(raw);
+  if (!P.open || !P.open.length) return raw;
+  const prices = await livePrices(P.open);
+  const fee = (P.rules?.fee_pct ?? 0.1) / 100;
+  P.live = {};
+  for (const t of P.open) {
+    const price = prices[t.symbol];
+    if (!price) continue;
+    const side = t.side === "long" ? 1 : -1;
+    const move = side * (price / t.entry - 1);
+    const upnl = Math.max(-t.margin, t.notional * move - t.notional * fee * (1 + price / t.entry));
+    const hit = (price - t.stop) * side <= 0 ? "stop" : (price - t.target) * side >= 0 ? "target" : null;
+    P.live[t.id] = { price, upnl: Math.round(upnl * 100) / 100, hit };
+  }
+  P.live_time = new Date().toISOString().slice(0, 19) + "Z";
+  return JSON.stringify(P);
+}
+
 // ---- what to do with an open position ---------------------------------------
 function evaluate(pos, frame, price, risk) {
   const side = pos.side === "long" ? 1 : -1;
@@ -232,8 +277,9 @@ export default {
       }
       if (path === "/") return html(PAGE);
       if (path === "/api/state") {
-        const [raw, paperRaw, state] = await Promise.all([env.KV.get("results"), env.KV.get("paper"), checkPositions(env, { save: false })]);
-        return new Response(`{"results":${raw || "null"},"paper":${paperRaw || "null"},"positions":${JSON.stringify(state.positions)},"evals":${JSON.stringify(state.evals)}}`,
+        const [raw, paperRaw, state] = await Promise.all([env.KV.get("results"),
+          env.KV.get("paper").then(livePaper), checkPositions(env, { save: false })]);
+        return new Response(`{"results":${raw || "null"},"paper":${paperRaw},"positions":${JSON.stringify(state.positions)},"evals":${JSON.stringify(state.evals)}}`,
           { headers: { "content-type": "application/json", "cache-control": "no-store" } });
       }
       if (path === "/api/open" && request.method === "POST") return openPosition(request, env);
