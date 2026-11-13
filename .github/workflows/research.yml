@@ -2,7 +2,7 @@ name: Research backtest
 on:
   push:
     branches: [main]
-    paths: ["research/backtest.py"]
+    paths: ["research/backtest.py", "research/crypto.py"]
   workflow_dispatch:
 permissions:
   contents: write
@@ -18,9 +18,10 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt numba
       - run: python research/backtest.py
+      - run: python research/crypto.py
       - name: Save the results
         run: |
           git config user.name "signal-bot"
           git config user.email "signal-bot@users.noreply.github.com"
-          git add research/results.csv
+          git add research/*.csv
           git diff --cached --quiet || (git commit -m "Research backtest results" && git pull --rebase -q && git push)
