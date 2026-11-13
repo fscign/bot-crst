@@ -19,6 +19,7 @@ jobs:
       DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
       TG_TOKEN: ${{ secrets.TG_TOKEN }}
       TG_CHAT: ${{ secrets.TG_CHAT }}
+      GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,10 +27,10 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: node deploy-prep.mjs
-      - run: npx wrangler deploy
+      - run: npx wrangler deploy --var GH_REPO:${{ github.repository }}
       - name: Set dashboard secrets
         run: |
-          for s in INGEST_TOKEN DASH_PASSWORD TG_TOKEN TG_CHAT; do
+          for s in INGEST_TOKEN DASH_PASSWORD TG_TOKEN TG_CHAT GH_DISPATCH_TOKEN; do
             v="${!s}"
             if [ -n "$v" ]; then printf '%s' "$v" | npx wrangler secret put "$s"; else echo "$s is not set, skipping"; fi
           done

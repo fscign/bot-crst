@@ -85,7 +85,8 @@ async function checkPositions(env, { save = true } = {}) {
   const open = positions.filter((p) => p.status === "open");
   const evals = {};
   if (!open.length) return { positions, evals };
-  const [watch, risk] = await Promise.all([getJSON(env, "watch", {}), getJSON(env, "risk", { stop_atr: 2, target_atr: 3 })]);
+  const meta = await getJSON(env, "meta", {});
+  const watch = meta.watch || {}, risk = meta.risk || { stop_atr: 2, target_atr: 3 };
   const prices = await Promise.all(open.map(livePrice));
   let dirty = false;
   const alerts = [];
@@ -111,9 +112,12 @@ async function checkPositions(env, { save = true } = {}) {
 
 // ---- scanner upload ----------------------------------------------------------
 async function ingest(request, env) {
-  const text = await request.text();
-  const data = JSON.parse(text);
+  const data = JSON.parse(await request.text());
   if (!Array.isArray(data.items)) return json({ error: "bad payload" }, 400);
+  const paperIn = data.paper;
+  delete data.paper;
+  const text = JSON.stringify(data);
+  const meta = await getJSON(env, "meta", {});
 
   const positions = await getJSON(env, "positions", []);
   const watch = { ...(data.watch || {}) };
@@ -127,9 +131,15 @@ async function ingest(request, env) {
   // Telegram: only NEW strong signals with a good track record, a few per scan
   const strongNow = data.items.filter((i) => i.proven && i.label.startsWith("STRONG"));
   const keysNow = strongNow.map((i) => `${i.symbol}|${i.tf}|${i.label}`);
-  const before = await getJSON(env, "strong", null);
-  await Promise.all([env.KV.put("results", text), putJSON(env, "watch", watch),
-    putJSON(env, "risk", data.risk || { stop_atr: 2, target_atr: 3 }), putJSON(env, "strong", keysNow)]);
+  const before = meta.strong || null;
+  const writes = [env.KV.put("results", text),
+    putJSON(env, "meta", { ...meta, watch, risk: data.risk || { stop_atr: 2, target_atr: 3 }, strong: keysNow })];
+  if (paperIn) {
+    // ignore results from a scan that started before the test was reset
+    const current = await getJSON(env, "paper", null);
+    if (!current || !current.epoch || current.epoch === paperIn.epoch) writes.push(putJSON(env, "paper", paperIn));
+  }
+  await Promise.all(writes);
   if (before && !data.demo) {
     const fresh = strongNow.filter((i) => !before.includes(`${i.symbol}|${i.tf}|${i.label}`)).slice(0, 8);
     if (fresh.length) {
@@ -158,10 +168,10 @@ async function openPosition(request, env) {
     stop: entry - side * risk.stop_atr * it.atr, target: entry + side * risk.target_atr * it.atr,
     best: entry, opened: new Date().toISOString().slice(0, 16).replace("T", " "), status: "open", last_code: "hold",
   };
-  const [positions, watch] = await Promise.all([getJSON(env, "positions", []), getJSON(env, "watch", {})]);
+  const [positions, meta] = await Promise.all([getJSON(env, "positions", []), getJSON(env, "meta", {})]);
   positions.push(pos);
-  watch[`${pos.symbol}|${pos.tf}`] = { label: it.label, score: it.score, atr: it.atr, price: it.price, time: it.time };
-  await Promise.all([putJSON(env, "positions", positions), putJSON(env, "watch", watch)]);
+  meta.watch = { ...(meta.watch || {}), [`${pos.symbol}|${pos.tf}`]: { label: it.label, score: it.score, atr: it.atr, price: it.price, time: it.time } };
+  await Promise.all([putJSON(env, "positions", positions), putJSON(env, "meta", meta)]);
   return json({ ok: true });
 }
 
@@ -178,6 +188,18 @@ async function closePosition(request, env) {
   return json({ ok: true });
 }
 
+// ---- start a scan on GitHub every 15 minutes ----------------------------------
+async function dispatchScan(env) {
+  if (!env.GH_DISPATCH_TOKEN || !env.GH_REPO) return;
+  const r = await fetch(`https://api.github.com/repos/${env.GH_REPO}/actions/workflows/scan.yml/dispatches`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.GH_DISPATCH_TOKEN}`, accept: "application/vnd.github+json",
+      "user-agent": "bot-crst-dashboard", "x-github-api-version": "2022-11-28" },
+    body: JSON.stringify({ ref: "main" }),
+  });
+  if (!r.ok) console.log("scan dispatch failed", r.status, await r.text());
+}
+
 // ---- router --------------------------------------------------------------------
 export default {
   async fetch(request, env) {
@@ -191,6 +213,10 @@ export default {
         if (!bearerOk(request, env)) return json({ error: "unauthorized" }, 401);
         const positions = await getJSON(env, "positions", []);
         return json(positions.filter((p) => p.status === "open").map((p) => ({ symbol: p.symbol, kind: p.kind, tf: p.tf })));
+      }
+      if (path === "/api/paper" && request.method === "GET") {
+        if (!bearerOk(request, env)) return json({ error: "unauthorized" }, 401);
+        return json(await getJSON(env, "paper", null));
       }
       if (path === "/login" && request.method === "POST") {
         const form = await request.formData();
@@ -206,12 +232,16 @@ export default {
       }
       if (path === "/") return html(PAGE);
       if (path === "/api/state") {
-        const [raw, state] = await Promise.all([env.KV.get("results"), checkPositions(env, { save: false })]);
-        return new Response(`{"results":${raw || "null"},"positions":${JSON.stringify(state.positions)},"evals":${JSON.stringify(state.evals)}}`,
+        const [raw, paperRaw, state] = await Promise.all([env.KV.get("results"), env.KV.get("paper"), checkPositions(env, { save: false })]);
+        return new Response(`{"results":${raw || "null"},"paper":${paperRaw || "null"},"positions":${JSON.stringify(state.positions)},"evals":${JSON.stringify(state.evals)}}`,
           { headers: { "content-type": "application/json", "cache-control": "no-store" } });
       }
       if (path === "/api/open" && request.method === "POST") return openPosition(request, env);
       if (path === "/api/close" && request.method === "POST") return closePosition(request, env);
+      if (path === "/api/paper/reset" && request.method === "POST") {
+        await putJSON(env, "paper", { epoch: crypto.randomUUID().slice(0, 8), reset: new Date().toISOString() });
+        return json({ ok: true });
+      }
       return new Response("Not found", { status: 404 });
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -220,6 +250,8 @@ export default {
 
   // every minute: check open positions and alert on changes
   async scheduled(event, env, ctx) {
+    const minute = new Date(event.scheduledTime).getUTCMinutes();
+    if (minute % 15 === 0) ctx.waitUntil(dispatchScan(env));
     ctx.waitUntil(checkPositions(env));
   },
 };

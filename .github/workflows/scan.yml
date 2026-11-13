@@ -1,15 +1,17 @@
 name: Scan markets
 on:
+  # The dashboard starts this job every 15 minutes (needs the GH_DISPATCH_TOKEN secret).
+  # The hourly schedule below is only a backup in case that trigger is not set up.
   schedule:
-    - cron: "7,37 * * * *"   # every 30 minutes
+    - cron: "52 * * * *"
   workflow_dispatch:
 concurrency:
   group: scan
-  cancel-in-progress: false
+  cancel-in-progress: false   # a new scan waits for the running one; extra waiting scans are dropped
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

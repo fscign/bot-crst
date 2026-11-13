@@ -39,6 +39,10 @@ button{padding:6px 11px;border:0;border-radius:6px;font:inherit;font-size:12.5px
 button.long{background:var(--buy)}button.short{background:var(--sell)}button.plain{background:var(--hold)}
 .note{color:var(--mute);font-size:13px;margin-top:18px}.err{color:var(--sell)}
 .demo{border-left:4px solid var(--sell);font-weight:600}
+.tabs{margin:4px 0 16px}.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 16px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile span{display:block;color:var(--mute);font-size:12px}.tile b{font-size:20px;font-variant-numeric:tabular-nums}
+svg.curve{height:150px}.rules{font-size:13px;color:var(--mute)}.rules li{margin:2px 0}
 `;
 
 export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -48,7 +52,7 @@ export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8"
 <button class="long">Sign in</button></form></div></main></body></html>`;
 
 const APP = `
-let S=null,F={kind:'all',tf:'all',side:'all',proven:true};
+let S=null,F={kind:'all',tf:'all',side:'all',proven:true,view:'signals'};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fp=p=>p==null?'':(p>=1?p.toLocaleString('en-US',{maximumFractionDigits:2}):Number(p).toPrecision(4));
@@ -89,8 +93,44 @@ function card(i,n){const up=i.score>0,hi=i.hist;
  +(i.headlines.length?'<ul class="hl">'+i.headlines.map(h=>'<li><a href="'+esc(h.l)+'" target="_blank" rel="noopener">'+esc(h.t)+'</a> ('+(h.s>0?'+':'')+h.s+')</li>').join('')+'</ul>':'')+'</details>'
  +'<div class="open"><label>Entry price<input id="e'+n+'" value="'+i.price+'"></label><label>Leverage<input id="l'+n+'" value="'+i.lev.x+'"></label><label>Position size<input id="s'+n+'" value="'+i.lev.size+'"></label>'
  +'<button class="long" data-open="'+n+'" data-side="long">I bought (long)</button><button class="short" data-open="'+n+'" data-side="short">I went short</button></div></div>';}
+function money(v){return (v<0?'-':'')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function curve(pts,start){if(pts.length<2)return '<p class="sub">The equity curve appears after a few scans.</p>';
+ const v=pts.map(p=>p[1]),lo=Math.min(start,...v),hi=Math.max(start,...v),r=(hi-lo)||1,y=x=>(146-(x-lo)/r*140).toFixed(1);
+ const d=v.map((x,i)=>(i?'L':'M')+(i/(v.length-1)*600).toFixed(1)+','+y(x)).join(' ');
+ return '<svg class="curve" viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Equity over time"><line x1="0" x2="600" y1="'+y(start)+'" y2="'+y(start)+'" stroke="var(--line)" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/><path d="'+d+'" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>'
+ +'<div class="sub" style="display:flex;justify-content:space-between;margin:2px 0 0"><span>'+pts[0][0].replace('T',' ')+'</span><span>'+pts[pts.length-1][0].replace('T',' ')+' UTC</span></div>';}
+function paperView(){const P=S.paper;
+ if(!P||P.balance==null)return '<section class="card"><h2>Paper trading test</h2><p class="sub" style="margin:0">'+(P&&P.reset?'Reset done. ':'')+'The test starts with the next scan. The first scan only notes which signals are already strong; trades open from the second scan on, when a new strong signal appears.</p></section>';
+ const st=P.stats,ret=(P.equity/P.start-1)*100,wr=st.trades?Math.round(st.wins/st.trades*100):null,
+  aw=st.wins?st.gross_win/st.wins:null,al=(st.trades-st.wins)?st.gross_loss/(st.trades-st.wins):null,pf=st.gross_loss?st.gross_win/st.gross_loss:null,
+  margin=P.open.reduce((a,t)=>a+t.margin,0),R=P.rules||{};
+ const tile=(k,v,c)=>'<div class="tile"><span>'+k+'</span><b class="'+(c||'')+'">'+v+'</b></div>';
+ let h='<div class="tiles">'+tile('Equity',money(P.equity),P.equity>=P.start?'pos':'neg')+tile('Return',(ret>=0?'+':'')+ret.toFixed(2)+'%',ret>=0?'pos':'neg')
+  +tile('Balance (closed trades)',money(P.balance))+tile('Closed trades',st.trades)+tile('Win rate',wr==null?'n/a':wr+'%')
+  +tile('Avg win / avg loss',(aw==null?'n/a':money(aw))+' / '+(al==null?'n/a':money(al)))+tile('Profit factor',pf==null?'n/a':pf.toFixed(2))
+  +tile('Max drawdown',st.max_dd_pct.toFixed(1)+'%')+tile('Open trades',P.open.length+' <small style="font-size:12px;color:var(--mute)">('+money(margin)+' in use)</small>')
+  +tile('Fees paid',money(st.fees))+'</div>';
+ h+='<section class="card"><h2>Equity</h2>'+curve(P.curve,P.start)+'</section>';
+ h+='<section class="card"><h2>Open test trades</h2>';
+ if(!P.open.length)h+='<p class="sub" style="margin:0">None right now. A trade opens when a new strong signal appears.</p>';
+ else{h+='<div class="scroll"><table><thead><tr><th>Opened (UTC)</th><th>Asset</th><th>Side</th><th class="num">Stake</th><th class="num">Entry</th><th class="num">Now</th><th class="num">Stop</th><th class="num">Target</th><th class="num">Result</th><th>Closes by</th></tr></thead><tbody>';
+  for(const t of P.open.slice().reverse())h+='<tr><td>'+t.opened.slice(0,16).replace('T',' ')+'</td><td><b>'+esc(t.symbol)+'</b> '+t.tf+'</td><td>'+t.side.toUpperCase()+' '+t.lev+'x</td><td class="num">'+money(t.margin)+'</td><td class="num">'+fp(t.entry)+'</td><td class="num">'+fp(t.last)+'</td><td class="num">'+fp(t.stop)+'</td><td class="num">'+fp(t.target)+'</td><td class="num '+(t.upnl>=0?'pos':'neg')+'">'+money(t.upnl)+'</td><td>'+t.until.slice(0,16).replace('T',' ')+'</td></tr>';
+  h+='</tbody></table></div>';}
+ h+='</section>';
+ const cl=P.closed.slice().sort((a,b)=>a.closed<b.closed?1:-1).slice(0,50);
+ if(cl.length){h+='<section class="card"><h2>Closed test trades <small style="color:var(--mute);font-weight:400">last 50</small></h2><div class="scroll"><table><thead><tr><th>Closed (UTC)</th><th>Asset</th><th>Side</th><th class="num">Stake</th><th class="num">Entry</th><th class="num">Exit</th><th>Why</th><th class="num">Profit</th><th class="num">Balance</th></tr></thead><tbody>';
+  for(const t of cl)h+='<tr><td>'+t.closed.slice(0,16).replace('T',' ')+'</td><td><b>'+esc(t.symbol)+'</b> '+t.tf+'</td><td>'+t.side.toUpperCase()+' '+t.lev+'x</td><td class="num">'+money(t.margin)+'</td><td class="num">'+fp(t.entry)+'</td><td class="num">'+fp(t.exit)+'</td><td>'+esc(t.reason)+'</td><td class="num '+(t.pnl>=0?'pos':'neg')+'">'+money(t.pnl)+' <small>('+(t.pct>0?'+':'')+t.pct+'%)</small></td><td class="num">'+money(t.balance)+'</td></tr>';
+  h+='</tbody></table></div></section>';}
+ h+='<section class="card"><h2>Rules of this test</h2><ul class="rules"><li>Started '+P.started.slice(0,16).replace('T',' ')+' UTC with '+money(P.start)+' USD.</li>'
+  +'<li>A trade opens on every new STRONG BUY or STRONG SELL'+(R.require_proven?' with a good track record':'')+', at the live price. One open trade per asset.</li>'
+  +'<li>Stake: '+R.stake_pct+'% of the balance, at least '+R.min_stake+' USD, at the leverage the signal suggests.</li>'
+  +'<li>Closes at the trailing stop, the target, liquidation, a signal flip, or after '+(R.max_hold_bars?R.max_hold_bars['1h']+' bars (1h), '+R.max_hold_bars['4h']+' bars (4h), '+R.max_hold_bars['1d']+' bars (1d)':'a time limit')+'. Exits are checked on 5-minute bars.</li>'
+  +'<li>Fee: '+R.fee_pct+'% of the position on entry and on exit. No slippage or funding costs, so real results would be somewhat worse.</li></ul>'
+  +'<button class="plain" id="reset" style="margin-top:8px">Reset the test</button></section>';
+ return h;}
 function render(){
- const R=S.results;let h='<h1>Trading signals</h1>';
+ const R=S.results;let h='<h1>Trading signals</h1><div class="tabs">'+seg('view',[['signals','Signals'],['paper','Paper test']])+'</div>';
+ if(F.view==='paper'){$('#app').innerHTML=h+paperView();return;}
  if(!R){$('#app').innerHTML=h+'<p class="sub">No scan results yet. The first scan arrives after the GitHub "Scan markets" job has run once.</p>'+positions();return;}
  const st=R.stats,age=Math.round((Date.now()-Date.parse(R.generated.replace(' ','T')+'Z'))/60000);
  h+='<p class="sub">Last scan '+R.generated+' UTC ('+age+' min ago) &middot; '+st.crypto+' crypto pairs and '+st.stocks+' stocks scanned &middot; '+st.signals+' signals'+(st.fear_greed!=null?' &middot; crypto Fear &amp; Greed '+st.fear_greed:'')+(age>120?' &middot; <b class="err">scanner looks stalled</b>':'')+'</p>';
@@ -108,6 +148,7 @@ document.addEventListener('click',async ev=>{const t=ev.target;
  else if(t.dataset.open){const n=t.dataset.open,i=S.results.items[n];t.disabled=true;
   await api('/api/open',{symbol:i.symbol,tf:i.tf,side:t.dataset.side,entry:$('#e'+n).value,leverage:$('#l'+n).value,size:$('#s'+n).value});await load();scrollTo({top:0,behavior:'smooth'});}
  else if(t.dataset.close){t.disabled=true;await api('/api/close',{id:t.dataset.close,exit:$('#x'+t.dataset.close).value});await load();}});
+document.addEventListener('click',async ev=>{if(ev.target.id==='reset'&&confirm('Start the paper test again from 1,000 USD? All test trades are cleared.')){ev.target.disabled=true;await api('/api/paper/reset',{});await load();}});
 document.addEventListener('change',ev=>{if(ev.target.id==='proven'){F.proven=ev.target.checked;render();}});
 setInterval(()=>{const a=document.activeElement;if(!a||a.tagName!=='INPUT'||a.type==='checkbox')load();},60000);
 load();

@@ -6,3 +6,5 @@ report.html
 node_modules/
 .wrangler/
 .dev.vars
+
+data/paper.json

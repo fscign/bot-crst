@@ -22,7 +22,7 @@ import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +31,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import signal_bot as sb  # indicators, scoring, news, leverage (shared with the local version)
+import paper
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -224,6 +225,74 @@ def fetch_news(symbol: str, name: str, kind: str, cfg: dict, fng: int | None) ->
 
 
 # --------------------------------------------------------------------------
+# Live prices and 5-minute bars (used by the paper trading test)
+# --------------------------------------------------------------------------
+def live_price(symbol: str, kind: str) -> float | None:
+    try:
+        if kind == "crypto":
+            try:
+                return float(get_json("https://data-api.binance.vision/api/v3/ticker/price",
+                                       {"symbol": symbol}, 10)["price"])
+            except Exception:
+                base = symbol[:-4]
+                return float(get_json("https://api.kucoin.com/api/v1/market/orderbook/level1",
+                                      {"symbol": f"{base}-USDT"}, 10)["data"]["price"])
+        import yfinance as yf
+        return float(yf.Ticker(symbol).fast_info["last_price"])
+    except Exception as e:
+        print(f"   live price failed for {symbol}: {e}")
+        return None
+
+
+def bars_since(symbol: str, kind: str, since: datetime) -> pd.DataFrame:
+    """Closed 5-minute bars that started at or after `since`."""
+    now = datetime.now(UTC)
+    if kind == "crypto":
+        frames, start = [], int(since.timestamp() * 1000)
+        for _ in range(10):                                   # up to ~35 days of 5m bars
+            rows = get_json("https://data-api.binance.vision/api/v3/klines",
+                            {"symbol": symbol, "interval": "5m", "startTime": start, "limit": 1000})
+            if not rows:
+                break
+            frames.extend(rows)
+            if len(rows) < 1000:
+                break
+            start = rows[-1][0] + 1
+        df = pd.DataFrame([r[:5] for r in frames], columns=["time", "open", "high", "low", "close"])
+        df["time"] = pd.to_datetime(df["time"], unit="ms", utc=True)
+        df = df.set_index("time").astype(float)
+    else:
+        import yfinance as yf
+        period = "5d" if now - since < timedelta(days=4) else "60d"
+        raw = yf.Ticker(symbol).history(period=period, interval="5m", auto_adjust=True)
+        if raw is None or raw.empty:
+            return pd.DataFrame()
+        df = raw[["Open", "High", "Low", "Close"]].copy()
+        df.columns = ["open", "high", "low", "close"]
+        df.index = pd.to_datetime(df.index, utc=True)
+    df = df[(df.index >= since) & (df.index + timedelta(minutes=5) <= now)]
+    return df.astype(float)
+
+
+_demo_last: dict[str, float] = {}
+
+
+def demo_bars_since(symbol: str, kind: str, since: datetime) -> pd.DataFrame:
+    now = datetime.now(UTC)
+    n = int((now - since).total_seconds() // 300)
+    if n <= 0:
+        return pd.DataFrame()
+    rng = np.random.default_rng()
+    start = _demo_last.get(symbol, 100.0)
+    close = start * np.exp(np.cumsum(rng.normal(0, 0.004, n)))
+    open_ = np.r_[start, close[:-1]]
+    spread = np.abs(rng.normal(0, 0.002, n))
+    idx = pd.date_range(start=since, periods=n, freq="5min")
+    return pd.DataFrame({"open": open_, "high": np.maximum(open_, close) * (1 + spread),
+                         "low": np.minimum(open_, close) * (1 - spread), "close": close}, index=idx)
+
+
+# --------------------------------------------------------------------------
 # Demo data (for testing without internet)
 # --------------------------------------------------------------------------
 def demo_frames() -> tuple[dict, dict, dict]:
@@ -260,6 +329,14 @@ def main() -> None:
             watch = requests.get(f"{dash}/api/watch", headers=hdr, timeout=20).json()
         except Exception as e:
             print(f"Could not read open positions from dashboard: {e}")
+    paper_state = None
+    if dash:
+        try:
+            paper_state = requests.get(f"{dash}/api/paper", headers=hdr, timeout=20).json()
+        except Exception as e:
+            print(f"Could not read the paper test from dashboard: {e}")
+    elif (ROOT / "data" / "paper.json").exists():
+        paper_state = json.loads((ROOT / "data" / "paper.json").read_text(encoding="utf-8"))
     watch_keys = {(w["symbol"], w["tf"]) for w in watch}
     watch_syms = {w["symbol"] for w in watch}
 
@@ -324,14 +401,28 @@ def main() -> None:
                     news[s] = res
 
     # ---- build the output: actionable signals, ranked, plus watched positions
-    items, watched = [], {}
+    items, watched, labels = [], {}, {}
     for s, n, k, fr in scored:
         it = build_item(s, n, k, fr, news.get(s), cfg)
+        labels[(s, fr["tf"])] = it["label"]
+        if args.demo:
+            _demo_last[s] = it["price"]
         if (s, fr["tf"]) in watch_keys:
             watched[f"{s}|{fr['tf']}"] = {"label": it["label"], "score": it["score"], "atr": it["atr"],
                                           "price": it["price"], "time": it["time"]}
         if it["label"] != "HOLD":
             items.append(it)
+
+    # ---- paper trading test
+    try:
+        pstate = paper.run(paper_state, items, labels, paper.settings(cfg),
+                           demo_bars_since if args.demo else bars_since,
+                           (lambda s, k: _demo_last.get(s)) if args.demo else live_price)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Paper test skipped this scan: {e}")
+        pstate = None
     out_items = []
     for kind in ("crypto", "stock"):
         ki = sorted((i for i in items if i["kind"] == kind), key=lambda i: (not i["proven"], -abs(i["score"])))
@@ -344,6 +435,10 @@ def main() -> None:
                "items": out_items, "watch": watched}
     (ROOT / "data").mkdir(exist_ok=True)
     (ROOT / "data" / "latest.json").write_text(json.dumps(payload), encoding="utf-8")
+    if pstate is not None:
+        payload["paper"] = pstate
+        if not dash:
+            (ROOT / "data" / "paper.json").write_text(json.dumps(pstate), encoding="utf-8")
     print(f"Scored {len(scored)} asset/timeframe pairs, {len(items)} signals, "
           f"{sum(i['proven'] for i in out_items)} with a good track record, in {payload['stats']['seconds']}s")
 

@@ -7,7 +7,7 @@ It gives signals and watches the positions you tell it about. It never places tr
 
 | Part | Where it runs | What it does |
 |---|---|---|
-| Scanner (`scanner/`) | GitHub Actions, every 30 minutes | Scores every liquid USDT pair on Binance and the stock lists, adds news sentiment, ranks the signals |
+| Scanner (`scanner/`) | GitHub Actions, started by the dashboard every 15 minutes (hourly GitHub schedule as a backup) | Scores every liquid USDT pair on Binance and the stock lists, adds news sentiment, ranks the signals |
 | Stock list (`scanner/universe.py`) | GitHub Actions, daily | Rebuilds the list of liquid US stocks. European stocks are in `scanner/europe.txt` |
 | Dashboard (`worker/`) | Cloudflare Workers, on your domain | Shows the signals, stores your open positions, checks their prices every minute, sends Telegram alerts |
 
@@ -55,6 +55,28 @@ After this everything runs by itself.
 
 If the deploy step fails on the domain, deploy once without the `DASH_DOMAIN` variable, then add the domain by hand in
 Cloudflare (Workers & Pages, bot-crst, Settings, Domains & Routes, Add, Custom domain) and set the variable again.
+
+### 5. Scans every 15 minutes (one more secret)
+GitHub's own scheduler is unreliable, so the dashboard starts each scan itself at :00, :15, :30 and :45.
+It needs a GitHub token that may start workflows in this repo, and nothing else:
+1. On GitHub: your profile picture, Settings, Developer settings, Personal access tokens, **Fine-grained tokens**, Generate new token.
+2. Name: `bot-crst scans`. Expiration: the longest offered (remember to renew it). Repository access: **Only select repositories**, `bot-crst`.
+3. Permissions, Repository permissions: **Actions: Read and write**. Leave everything else as it is.
+4. Generate, copy the token, and add it as the repository secret `GH_DISPATCH_TOKEN`.
+5. Run **Deploy dashboard** once more.
+Without this secret the scan still runs once an hour from GitHub's own schedule.
+
+## Paper trading test
+The **Paper test** tab runs a virtual account alongside the real signals:
+- Starts with 1,000 USD. Opens a trade on every new STRONG BUY or STRONG SELL with a good track record.
+- Stake: 1% of the balance, never less than 10 USD (so 10 USD while the balance is under 1,000).
+- Leverage as suggested on the signal. Fee 0.1% on entry and exit.
+- Closes at the trailing stop, the target, liquidation, a signal flip, or a time limit (48 bars on 1h, 42 on 4h, 20 on 1d).
+  Exits are found by replaying 5-minute bars, so a stop hit between scans is filled at the stop.
+- Shows equity, return, win rate, profit factor, drawdown, open and closed test trades.
+- **Reset the test** at the bottom of the tab starts again from 1,000 USD.
+- All rules are in the `paper` section of `scanner/config.json`.
+- `python tests/test_paper.py` checks the maths.
 
 ## Using the dashboard
 - Signals are ranked by strength. By default only signals with a good track record on that asset are shown.
