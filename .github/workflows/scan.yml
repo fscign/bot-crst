@@ -20,5 +20,5 @@ jobs:
       - name: Scan and send to dashboard
         run: python scanner/scan.py
         env:
-          DASH_URL: https://${{ vars.DASH_DOMAIN }}
+          DASH_URL: https://${{ secrets.DASH_DOMAIN || vars.DASH_DOMAIN }}
           INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
