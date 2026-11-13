@@ -23,6 +23,7 @@ if (!ns) {
   console.log("Created KV storage", TITLE);
 }
 let toml = readFileSync("wrangler.toml", "utf8").replace("KV_ID_PLACEHOLDER", ns.id);
-toml = toml.replace(/^#ROUTES#.*$/m, domain ? `routes = [{ pattern = "${domain}", custom_domain = true }]` : "");
+const custom = domain && !domain.endsWith(".workers.dev");   // a workers.dev address needs no route
+toml = toml.replace(/^#ROUTES#.*$/m, custom ? `routes = [{ pattern = "${domain}", custom_domain = true }]` : "");
 writeFileSync("wrangler.toml", toml);
-console.log(domain ? `Dashboard domain: ${domain}` : "No DASH_DOMAIN set: using the workers.dev address only");
+console.log(custom ? `Dashboard domain: ${domain}` : "Using the free workers.dev address (shown in Cloudflare under Workers & Pages, bot-crst)");

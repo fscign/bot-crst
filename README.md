@@ -42,7 +42,7 @@ In this repo: Settings, Secrets and variables, Actions.
 
 | Name | Value |
 |---|---|
-| `DASH_DOMAIN` | the address for the dashboard, for example `signals.yourdomain.com` (no https://) |
+| `DASH_DOMAIN` | the address for the dashboard, for example `signals.yourdomain.com` (no https://). No domain? Deploy once without this variable, then set it to the free address Cloudflare gives you, like `bot-crst.yourname.workers.dev` |
 
 ### 4. Start it
 In the Actions tab (enable workflows if GitHub asks):
