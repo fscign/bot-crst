@@ -135,7 +135,8 @@ def families(d: pd.DataFrame, rng, tf: str) -> list:
     return out
 
 
-def run_asset(df, tf, btc_up, rng, sink):
+def run_asset(df, tf, btc_up, rng, sink, allow=None):
+    """allow: optional daily True/False series; entries are only taken on days when it is True."""
     if df is None or len(df) < 400:
         return
     d = sb.add_indicators(df)
@@ -145,6 +146,8 @@ def run_asset(df, tf, btc_up, rng, sink):
     gate = btc_up.reindex(d.index.normalize(), method="ffill").fillna(False).values.astype(np.bool_)
     for fam, side, entry, exit_sig, exits in families(d, rng, tf):
         ent = entry.fillna(False).values.astype(np.bool_)
+        if allow is not None:
+            ent &= allow.reindex(d.index.normalize()).fillna(False).values.astype(np.bool_)
         xs = exit_sig.fillna(False).values.astype(np.bool_)
         for name, stop_m, trail_m, target_r, max_hold in exits:
             ei, r, sf = sim(o, h, l, c, atr, ent, xs, side, stop_m, trail_m, target_r, max_hold)
@@ -236,6 +239,31 @@ def portfolio(close: pd.DataFrame, btc: pd.Series) -> pd.DataFrame:
     return res
 
 
+def trade_table(sink: dict) -> pd.DataFrame:
+    """Statistics per rule, period (A, B, C), filter and fee level."""
+    span = {}
+    for (tf, _, _), parts in sink.items():
+        tt = np.concatenate([p[:, 0] for p in parts])
+        lo, hi = span.get(tf, (np.inf, -np.inf))
+        span[tf] = (min(lo, tt.min()), max(hi, tt.max()))
+    rows = []
+    for (tf, fam, ex), parts in sink.items():
+        a = np.concatenate(parts)
+        lo, hi = span[tf]
+        c1, c2 = lo + CUTS[0] * (hi - lo), lo + CUTS[1] * (hi - lo)
+        for fname, mask in (("none", np.ones(len(a), bool)), ("btc_uptrend", a[:, 3] == 1), ("btc_downtrend", a[:, 3] == 0)):
+            for fee in FEES:
+                net = a[:, 1] - 2 * fee / 100 / a[:, 2]
+                row = {"tf": tf, "family": fam, "exit": ex, "filter": fname, "fee": fee,
+                       "cutA": pd.to_datetime(c1, unit="s").strftime("%Y-%m-%d"),
+                       "cutB": pd.to_datetime(c2, unit="s").strftime("%Y-%m-%d"),
+                       "avg_stop_pct": round(a[mask, 2].mean() * 100, 2) if mask.any() else np.nan}
+                for seg, m in (("A", a[:, 0] < c1), ("B", (a[:, 0] >= c1) & (a[:, 0] < c2)), ("C", a[:, 0] >= c2)):
+                    row.update({f"{seg}_{k}": v for k, v in seg_stats(net[mask & m]).items()})
+                rows.append(row)
+    return pd.DataFrame(rows).sort_values(["tf", "family", "exit", "filter", "fee"])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
@@ -280,29 +308,9 @@ def main() -> None:
                 run_asset(df, tf, btc_up, rng, sink)
             print(f"{tf}: {sum(d is not None for d in dfs)} coins, {time.time() - t0:.0f}s", flush=True)
 
-    # ---- trade rules: statistics per period, filter and fee level
-    span = {}
-    for (tf, _, _), parts in sink.items():
-        tt = np.concatenate([p[:, 0] for p in parts])
-        lo, hi = span.get(tf, (np.inf, -np.inf))
-        span[tf] = (min(lo, tt.min()), max(hi, tt.max()))
-    rows = []
-    for (tf, fam, ex), parts in sink.items():
-        a = np.concatenate(parts)
-        lo, hi = span[tf]
-        c1, c2 = lo + CUTS[0] * (hi - lo), lo + CUTS[1] * (hi - lo)
-        for fname, mask in (("none", np.ones(len(a), bool)), ("btc_uptrend", a[:, 3] == 1), ("btc_downtrend", a[:, 3] == 0)):
-            for fee in FEES:
-                net = a[:, 1] - 2 * fee / 100 / a[:, 2]
-                row = {"tf": tf, "family": fam, "exit": ex, "filter": fname, "fee": fee,
-                       "cutA": pd.to_datetime(c1, unit="s").strftime("%Y-%m-%d"),
-                       "cutB": pd.to_datetime(c2, unit="s").strftime("%Y-%m-%d"),
-                       "avg_stop_pct": round(a[mask, 2].mean() * 100, 2) if mask.any() else np.nan}
-                for seg, m in (("A", a[:, 0] < c1), ("B", (a[:, 0] >= c1) & (a[:, 0] < c2)), ("C", a[:, 0] >= c2)):
-                    row.update({f"{seg}_{k}": v for k, v in seg_stats(net[mask & m]).items()})
-                rows.append(row)
+    rows = trade_table(sink)
     tag = "_demo" if args.demo else ""
-    pd.DataFrame(rows).sort_values(["tf", "family", "exit", "filter", "fee"]).to_csv(OUT / f"crypto_trades{tag}.csv", index=False)
+    rows.to_csv(OUT / f"crypto_trades{tag}.csv", index=False)
 
     # ---- portfolio rules
     close = pd.DataFrame({s: df["close"] for s, df in daily.items()}).sort_index()
@@ -310,6 +318,27 @@ def main() -> None:
     port = portfolio(close, close["BTCUSDT"])
     port.insert(0, "periods", " | ".join(port.attrs["cuts"]))
     port.to_csv(OUT / f"crypto_portfolio{tag}.csv", index=False)
+
+    # ---- robustness: daily rules on a point-in-time universe
+    # The main test uses the 80 coins that are most traded TODAY, which favours coins that did well recently.
+    # Here every USDT pair is loaded and a coin may only be entered on days when it was among the 80 most
+    # traded over the PREVIOUS 30 days.
+    if not args.demo:
+        wide = dict(cfg)
+        wide["universe"] = {**cfg["universe"], "crypto_min_volume_usd": 0, "crypto_max": 2000}
+        _, every = scan.crypto_universe(wide)
+        all_syms = [r["symbol"] for r in every]
+        with ThreadPoolExecutor(6) as ex:
+            got = dict(zip(all_syms, ex.map(lambda s: klines_history(s, "1d", BARS["1d"]), all_syms)))
+        got = {s: df for s, df in got.items() if df is not None and len(df) > 60}
+        dv = pd.DataFrame({s: (df["close"] * df["volume"]) for s, df in got.items()}).sort_index()
+        dv.index = dv.index.normalize()
+        allowed = dv.rolling(30).mean().shift(1).rank(axis=1, ascending=False) <= 80
+        pit: dict = {}
+        for s, df in got.items():
+            run_asset(df, "1d", btc_up, rng, pit, allow=allowed[s])
+        trade_table(pit).to_csv(OUT / "crypto_trades_pit.csv", index=False)
+        print(f"point-in-time universe: {len(got)} coins loaded, {time.time() - t0:.0f}s")
     print(f"{sum(len(p) for ps in sink.values() for p in ps):,} trades, {len(rows)} trade groups, "
           f"{len(port)} portfolio rows, {time.time() - t0:.0f}s")
 
