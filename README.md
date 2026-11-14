@@ -109,3 +109,7 @@ The **Paper test** tab trades a virtual 1,000 USD account using only the rules t
 
 ## Running it on your own computer instead
 `pip install -r requirements.txt`, then `python scanner/signal_bot.py --serve` opens a local dashboard with a small fixed watchlist.
+
+## Odds watch (separate tool)
+`odds/` and `odds-worker/` are a second, independent tool in this repo: it compares sports betting prices and
+alerts on value bets and arbitrage. Setup and details are in [odds/README.md](odds/README.md).

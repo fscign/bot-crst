@@ -1,0 +1,9 @@
+name = "bot-odds"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+#ROUTES# (the deploy job puts your domain here when the ODDS_DOMAIN variable is set)
+
+[[kv_namespaces]]
+binding = "KV"
+id = "KV_ID_PLACEHOLDER"

@@ -1,0 +1,28 @@
+name: Odds scan
+on:
+  # Six runs a day fit the free data plan (500 credits a month). See odds/README.md before changing.
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+concurrency:
+  group: odds-scan
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python tests/test_odds.py
+      - name: Scan odds, alert, update the dashboard
+        run: python odds/scan.py
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ODDS_DOMAIN: ${{ secrets.ODDS_DOMAIN || vars.ODDS_DOMAIN }}
+          INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
