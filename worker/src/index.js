@@ -279,7 +279,7 @@ async function weeklyReport(env) {
   if (!P) return;
   const lines = [P, ...Object.values(P.accounts || {})].map(accountLine).filter(Boolean);
   if (lines.length) await telegram(env, "Weekly report (paper test accounts)\n\n" + lines.join("\n\n")
-    + "\n\nJudge the rules on 50+ closed trades, not on one week. Backtest expectation for stocks: about +0.1R per trade.");
+    + "\n\nJudge the rules on 50+ closed trades, not on one week. Backtest expectation for the stock trend rule: roughly +0.2R per trade, with only about 1 trade in 5 a winner.");
 }
 
 async function stallCheck(env) {

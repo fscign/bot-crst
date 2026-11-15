@@ -95,9 +95,36 @@ filter, the latest period is only slightly positive.
 
 **Applied:** the experimental crypto account only opens trades while Bitcoin is higher than 30 days ago.
 
+## Stocks, round 4: can the stock rule be improved? (15 Nov 2026)
+
+`research/stocks.py`, files `stock_trades.csv` and `stock_efficiency.csv`. Daily bars, 10 years, 600 US and about
+110 European stocks, 430,000 trades, three periods (the latest, mid-2024 to now, as holdout). New this round: profit
+is measured **per day in the market**, so rules that hold for different lengths of time can be compared fairly.
+
+1. **The score-based rule was worse than random.** Per day held, buying when the score crossed +40 earned
+   0.05%, 0.03% and 0.06% in the three periods (US). Buying on random days with the same exit earned 0.07%, 0.08%
+   and 0.09%. The round 1 conclusion "this signal has an edge" was wrong: its profit was the market's own rise.
+2. **Stock entries do not matter much; staying in does.** Wider stops and longer holds beat tight ones in every
+   period and both markets, mostly because they stay invested in a rising market.
+3. **Best consistent rule: the 200-day trend.** Buy when the daily close crosses above the stock's 200-day
+   average, sell when it closes below. Per day held (US): 0.08%, 0.09%, 0.13%; Europe: 0.04%, 0.11%, 0.07%.
+   That is better than the old rule in all six cases, and equal to or better than random entries.
+   Only about 1 trade in 5 wins: many small losses, a few large gains. Average hold about 30 trading days.
+4. **Buying sharp dips in an uptrend** (close 2.5 standard deviations below the 20-day average) also did well per
+   day held (65 to 70% winners), but trades are rare and short, so money would sit idle most of the time. Not used yet.
+
+What this means: on stocks the bot earns roughly what the market gives while a stock is in an uptrend, and
+steps aside when it is not. It has not been shown to beat an index fund, and the stock list is today's liquid
+names over a mostly rising decade, which flatters every number here.
+
+**Applied:** the stock paper account now trades the 200-day trend rule (US 0.75% risk, Europe 0.5%).
+The old score rules and the 4h rule were removed. Trades already open under the old rules run to their own exits.
+
 ## What the bot does with this
-- The paper test trades only the three rules above, risking 0.75%, 0.5% and 0.25% of the account per trade
-  (more where the evidence is stronger), without leverage, total exposure capped at 1.5x the account.
-- Every signal card shows the backtest verdict for its kind, and the dashboard hides kinds that lost money
-  unless you untick the filter.
-- Re-run the research any time: Actions tab, "Research backtest", Run workflow.
+- **Stock account:** the 200-day trend rule from round 4, without leverage, total exposure capped at 1.5x the account.
+- **Crypto account (experiment):** daily volatility breakouts on the 80 most traded coins, only while Bitcoin is
+  higher than 30 days ago (rounds 2 and 3). Expect roughly break-even.
+- **Self-check:** the research re-runs on the 1st of every month. A rule whose kind of trade no longer shows a profit
+  in both the older and the latest part of history is paused automatically (no new trades) until it recovers.
+- Signal cards show the round 1 verdict for their kind. Read "made money" as "made money in a rising market".
+- Re-run by hand: Actions tab, "Research backtest", Run workflow.

@@ -23,6 +23,7 @@ jobs:
       - run: pip install -r requirements.txt numba
       - run: python research/backtest.py
       - run: python research/crypto.py
+      - run: python research/stocks.py
       - name: Save the results
         run: |
           git config user.name "signal-bot"

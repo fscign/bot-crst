@@ -32,6 +32,8 @@ UTC = timezone.utc
 TF = {"1h": timedelta(hours=1), "4h": timedelta(hours=4), "1d": timedelta(days=1)}
 VERSION = 2
 
+EXIT_TEXT = {"below_ema200": "closed below its 200-day average"}
+
 CONTEXT_LABELS = {
     "btc_above_ema100": "Bitcoin is above its 100-day average",
     "btc_above_ema200": "Bitcoin is above its 200-day average",
@@ -167,7 +169,7 @@ def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime, 
             "stop0": price - side * stop_dist, "stop": price - side * stop_dist, "target": None,
             "partial_at": price + side * stop_dist if rule["exit"] == "partial" else None,
             "banked": 0.0, "best": price, "trail_atr": rule.get("trail_atr", cfg["trail_atr"]),
-            "flip_exit": rule.get("flip_exit", True),
+            "flip_exit": rule.get("flip_exit", True), "exit_setup": rule.get("exit_setup"),
             "until": now_iso(t + TF[it["tf"]] * rule["max_hold_bars"]),
         }
         state["open"].append(tr)
@@ -236,7 +238,7 @@ def replay(state: dict, tr: dict, bars: pd.DataFrame, cfg: dict) -> tuple[str, f
             return "target", tr["target"], t
         tr["last"] = float(c)
         tr["checked"] = now_iso(t.to_pydatetime() + timedelta(minutes=5))
-        if (best - tr["best"]) * side > 0:
+        if (best - tr["best"]) * side > 0 and trail > 0:      # trail 0 = the stop stays where it was set
             tr["best"] = float(best)
             ns = tr["best"] - side * trail
             tr["stop"] = max(tr["stop"], ns) if side == 1 else min(tr["stop"], ns)
@@ -245,7 +247,8 @@ def replay(state: dict, tr: dict, bars: pd.DataFrame, cfg: dict) -> tuple[str, f
     return None
 
 
-def update_open(state: dict, labels: dict, cfg: dict, bars_since, price_now, t: datetime) -> list[dict]:
+def update_open(state: dict, labels: dict, cfg: dict, bars_since, price_now, t: datetime,
+                setups: dict | None = None) -> list[dict]:
     closed, still = [], []
     for tr in state["open"]:
         exit_ = None
@@ -260,6 +263,9 @@ def update_open(state: dict, labels: dict, cfg: dict, bars_since, price_now, t: 
             side = 1 if tr["side"] == "long" else -1
             if tr.get("flip_exit", True) and lab and ((side == 1 and "SELL" in lab) or (side == -1 and "BUY" in lab)):
                 exit_ = (f"signal flipped to {lab}", price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
+            elif tr.get("exit_setup") and tr["exit_setup"] in (setups or {}).get((tr["symbol"], tr["tf"]), []):
+                exit_ = (EXIT_TEXT.get(tr["exit_setup"], tr["exit_setup"]),
+                         price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
             elif t >= parse(tr["until"]):
                 exit_ = ("time limit", price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
         if exit_:
@@ -280,7 +286,12 @@ def rules_text(cfg: dict) -> list[str]:
         how = (f"stop {stop:g} ATR, then trailing {trail:g} ATR behind the best price, no profit target"
                if r["exit"] == "trail" else
                f"half is sold at +1R and the stop moves to the entry price, the rest trails {trail:g} ATR")
-        if r.get("trigger", "tech") == "vol_breakout":
+        if r.get("exit_setup") == "below_ema200":
+            how = (f"sell when the daily close falls below the 200-day average; safety stop {stop:g} ATR below "
+                   f"the entry price; no profit target")
+        if r.get("trigger") == "ema200_cross_up":
+            entry = "enter when the daily close crosses above the stock's 200-day average"
+        elif r.get("trigger", "tech") == "vol_breakout":
             entry = ("enter after a bar more than twice its normal range that closes near its high, "
                      "above the 50-bar average")
         else:
@@ -309,7 +320,8 @@ def run(state: dict | None, items: list[dict], labels: dict, cfg: dict, bars_sin
     t = t or datetime.now(UTC)
     if not state or "balance" not in state or state.get("version") != VERSION:
         state = fresh_state(cfg, (state or {}).get("epoch"))
-    closed = update_open(state, labels, cfg, bars_since, price_now, t)
+    setups = {(it["symbol"], it["tf"]): it.get("setups", []) for it in items}
+    closed = update_open(state, labels, cfg, bars_since, price_now, t, setups)
     opened = open_new(state, items, cfg, price_now, t, context)
     for tr in state["open"]:
         tr["upnl"] = round(unrealized(tr), 2)

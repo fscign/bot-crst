@@ -196,6 +196,11 @@ def setups(d: pd.DataFrame) -> list[str]:
     ema50 = last.get("ema50", np.nan)
     if rng > 2 * prev_atr and last["close"] > last["low"] + 0.75 * rng and last["close"] > ema50:
         out.append("vol_breakout")
+    ema200, prev = last.get("ema200", np.nan), d.iloc[-2]
+    if last["close"] > ema200 and prev["close"] <= prev.get("ema200", np.nan):
+        out.append("ema200_cross_up")                 # just closed above its 200-bar average
+    if last["close"] < ema200:
+        out.append("below_ema200")
     return out
 
 
@@ -260,6 +265,16 @@ def load_verdicts() -> dict:
         out[(x.market, x.tf, x.side, x.family)] = {"v": v, "is": round(float(x.is_avg_r), 2),
                                                    "oos": round(float(x.oos_avg_r), 2),
                                                    "n": int(x.is_n + x.oos_n)}
+    # daily stock rules from research/stocks.py: key family is "family/exit";
+    # "is" = the older three quarters of the history, "oos" = the latest quarter
+    path = ROOT / "research" / "stock_trades.csv"
+    if path.exists():
+        s = pd.read_csv(path)
+        for _, x in s[s["filter"] == "none"].iterrows():
+            older = min(float(x.A_avg), float(x.B_avg))
+            out[(x.market, "1d", "long", f"{x.family}/{x.exit}")] = {
+                "v": "good" if older > 0 and x.C_avg > 0 else "unclear", "is": round(older, 2),
+                "oos": round(float(x.C_avg), 2), "n": int(x.A_n + x.B_n + x.C_n)}
     return out
 
 

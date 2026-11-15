@@ -143,4 +143,33 @@ assert s["title"] == "Crypto (experiment)" and "Bitcoin is above its 100-day ave
 s = scan_ctx(s, [coin("XUSDT")], T0 + timedelta(days=3), {"btc_above_ema100": True}, labels={("XUSDT", "1d"): "SELL"})
 assert len(s["open"]) == 1
 
+# 200-day trend rule: enters on the cross, fixed stop (no trailing), exits when the close is below the average
+TR = paper.settings({"risk": {"stop_atr": 2.0}, "paper": {"fee_pct": {"crypto": 0, "us": 0, "eu": 0}, "rules": [
+    {"name": "trend", "markets": ["us"], "tf": "1d", "side": "long", "trigger": "ema200_cross_up", "exit": "hold",
+     "exit_setup": "below_ema200", "stop_atr": 3.0, "trail_atr": 0, "flip_exit": False, "risk_pct": 0.75,
+     "max_hold_bars": 500}]}})
+
+
+def stock(sym, setups):
+    return {**item(sym, tech=0, label="HOLD"), "setups": list(setups)}
+
+
+def scan_tr(state, items, t, feed=None, price=100.0):
+    return paper.run(state, items, {}, TR, lambda s, k, since: (feed or {}).get(s, pd.DataFrame()), lambda s, k: price, t)
+
+
+s = scan_tr(None, [], T0)
+s = scan_tr(s, [stock("TTT", ["ema200_cross_up"])], T0 + timedelta(days=1))
+tr = s["open"][0]
+assert tr["stop"] == 97 and tr["notional"] == 200 and tr["exit_setup"] == "below_ema200"
+# price runs up: the stop does not trail
+feed = {"TTT": bars(T0 + timedelta(days=1), [[100, 120, 99, 118]])}
+s = scan_tr(s, [stock("TTT", [])], T0 + timedelta(days=2), feed)
+assert s["open"][0]["stop"] == 97 and s["open"][0]["last"] == 118
+# close below the 200-day average: sold at the live price
+s = scan_tr(s, [stock("TTT", ["below_ema200"])], T0 + timedelta(days=3), price=110)
+c = s["closed"][-1]
+assert c["reason"] == "closed below its 200-day average" and c["exit"] == 110 and c["pnl"] == 20.0, c
+assert "200-day average" in s["rules_text"][1]
+
 print("All paper trading checks passed")

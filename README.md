@@ -67,17 +67,17 @@ It needs a GitHub token that may start workflows in this repo, and nothing else:
 Without this secret the scan still runs once an hour from GitHub's own schedule.
 
 ## Research and the paper trading test
-`research/backtest.py` tests the bot's rules and several alternatives on years of real data.
-The findings are in `research/RESULTS.md`. In short: crypto signals and short selling lost money in the
-backtest; buying stocks on daily signals with a trailing stop is the only thing that held up.
+`research/` tests rules on years of real data; the findings are in `research/RESULTS.md`, and `MAINTENANCE.md`
+explains how everything fits together and how to keep it running.
 
-The **Paper test** tab trades a virtual 1,000 USD account using only the rules that held up:
-- US stocks daily (risk 0.75% per trade), European stocks daily (0.5%), US stocks 4h (0.25%), long only.
-- Entry when the technical score crosses +40. No leverage; all positions together at most 1.5x the account.
-- Exit: stop 2 ATR, then trailing 3 ATR behind the best price, no profit target. Also on a signal flip or time limit.
-- Set `"exit": "partial"` on a rule in `scanner/config.json` to sell half at +1R and move the stop to the entry price.
-- Telegram reports every test trade the bot opens and closes.
-- **Reset the test** at the bottom of the tab starts again. `python tests/test_paper.py` checks the maths.
+The **Paper test** tab runs two virtual 1,000 USD accounts:
+- **Stocks (200-day trend):** buys a stock when its daily close crosses above its 200-day average and sells when it
+  closes below. US stocks risk 0.75% of the account per trade, European 0.5%. No leverage.
+- **Crypto (experiment):** daily volatility breakouts on the 80 most traded coins, only while Bitcoin is higher than
+  30 days ago, 0.5% risk. The research found no proven crypto edge, so expect roughly break-even.
+- The research re-runs monthly and pauses a rule automatically if its kind of trade stops showing a profit.
+- Telegram reports every test trade, a weekly summary on Sundays, and a warning if scans stop arriving.
+- Rules are in the `paper` section of `scanner/config.json`. `python tests/test_paper.py` checks the maths.
 
 ## Using the dashboard
 - Signals are ranked by strength. By default only signals with a good track record on that asset are shown.
@@ -87,7 +87,7 @@ The **Paper test** tab trades a virtual 1,000 USD account using only the rules t
 - When you really close it, enter the exit price and press **I closed it**.
 
 ## Telegram alerts
-- Every trade the bot opens or closes in its test account (these follow the rules that passed the backtest).
+- Every trade the bot opens or closes in its test accounts, a weekly summary, and a warning if scans stop.
 - Any change in "What to do" for an open position: stop hit, target reached, signal flipped, near liquidation.
 
 ## Settings
