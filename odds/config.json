@@ -1,0 +1,51 @@
+{
+  "currency": "EUR",
+  "timezone": "Europe/Tallinn",
+
+  "my_books": {
+    "coolbet": "Coolbet",
+    "betsson": "Betsson/Betsafe"
+  },
+  "book_notes": {
+    "betsson": "Price is from Betsson. Betsafe.ee is the same group and usually matches, confirm it there before betting."
+  },
+  "manual_books": ["Olybet", "Optibet"],
+
+  "sharp_books": ["pinnacle"],
+  "exchange_books": ["betfair_ex_eu"],
+
+  "leagues": [
+    "soccer_uefa_champs_league",
+    "soccer_epl",
+    "soccer_spain_la_liga",
+    "soccer_germany_bundesliga",
+    "soccer_italy_serie_a",
+    "soccer_france_ligue_one",
+    "soccer_uefa_europa_league",
+    "soccer_uefa_nations_league",
+    "basketball_nba",
+    "basketball_euroleague",
+    "icehockey_nhl"
+  ],
+  "markets": ["h2h"],
+  "window_hours": 36,
+
+  "monthly_credits": 500,
+  "quota_reset_day": 1,
+  "runs_per_day": 6,
+  "settle_results": true,
+
+  "min_edge": 0.03,
+  "max_edge": 0.15,
+  "min_odds": 1.3,
+  "max_odds": 6.0,
+  "min_arb": 0.005,
+  "max_age_min": 20,
+  "max_sharp_margin": 0.08,
+  "max_exchange_spread": 0.05,
+  "min_minutes_to_start": 10,
+
+  "paper_bankroll": 1000,
+  "kelly_fraction": 0.25,
+  "max_stake_pct": 0.02
+}

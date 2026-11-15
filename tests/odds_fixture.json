@@ -1,0 +1,338 @@
+{
+ "now": "2026-11-14T12:00:00Z",
+ "remaining": 20000,
+ "odds": {
+  "soccer_epl": [
+   {
+    "id": "x1",
+    "sport_key": "soccer_epl",
+    "sport_title": "EPL",
+    "home_team": "Arsenal",
+    "away_team": "Chelsea",
+    "commence_time": "2026-11-14T17:00:00Z",
+    "bookmakers": [
+     {
+      "key": "pinnacle",
+      "title": "pinnacle",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 2.0
+         },
+         {
+          "name": "Draw",
+          "price": 3.5
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.8
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betfair_ex_eu",
+      "title": "betfair_ex_eu",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 2.06
+         },
+         {
+          "name": "Draw",
+          "price": 3.65
+         },
+         {
+          "name": "Chelsea",
+          "price": 4.0
+         }
+        ]
+       },
+       {
+        "key": "h2h_lay",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 2.08
+         },
+         {
+          "name": "Draw",
+          "price": 3.7
+         },
+         {
+          "name": "Chelsea",
+          "price": 4.1
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "coolbet",
+      "title": "coolbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 2.2
+         },
+         {
+          "name": "Draw",
+          "price": 3.3
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.5
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betsson",
+      "title": "betsson",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 2.02
+         },
+         {
+          "name": "Draw",
+          "price": 3.4
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.6
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "x2",
+    "sport_key": "soccer_epl",
+    "sport_title": "EPL",
+    "home_team": "Liverpool",
+    "away_team": "Everton",
+    "commence_time": "2026-11-15T14:00:00Z",
+    "bookmakers": [
+     {
+      "key": "pinnacle",
+      "title": "pinnacle",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.42
+         },
+         {
+          "name": "Draw",
+          "price": 5.0
+         },
+         {
+          "name": "Everton",
+          "price": 7.6
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "coolbet",
+      "title": "coolbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.4
+         },
+         {
+          "name": "Draw",
+          "price": 4.8
+         },
+         {
+          "name": "Everton",
+          "price": 7.0
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betsson",
+      "title": "betsson",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.41
+         },
+         {
+          "name": "Draw",
+          "price": 4.7
+         },
+         {
+          "name": "Everton",
+          "price": 7.2
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "basketball_nba": [
+   {
+    "id": "x3",
+    "sport_key": "basketball_nba",
+    "sport_title": "NBA",
+    "home_team": "Boston Celtics",
+    "away_team": "Miami Heat",
+    "commence_time": "2026-11-15T02:00:00Z",
+    "bookmakers": [
+     {
+      "key": "pinnacle",
+      "title": "pinnacle",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.5
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.75
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "coolbet",
+      "title": "coolbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.47
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.95
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betsson",
+      "title": "betsson",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.58
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.45
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "icehockey_nhl": [
+   {
+    "id": "x4",
+    "sport_key": "icehockey_nhl",
+    "sport_title": "NHL",
+    "home_team": "Toronto Maple Leafs",
+    "away_team": "Boston Bruins",
+    "commence_time": "2026-11-15T03:00:00Z",
+    "bookmakers": [
+     {
+      "key": "pinnacle",
+      "title": "pinnacle",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.95
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.95
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "coolbet",
+      "title": "coolbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.9
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.92
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}
