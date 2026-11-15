@@ -96,23 +96,34 @@ def when(text):
     return E.parse_time(text).astimezone(ZoneInfo(CFG["timezone"])).strftime("%a %d %b %H:%M")
 
 
+def until_start(text, now):
+    mins = int((E.parse_time(text) - now).total_seconds() // 60)
+    return f"starts in {mins} min" if mins < 120 else f"starts in {mins // 60} h"
+
+
 def book_name(key):
     return CFG["my_books"].get(key, key)
 
 
-def describe(a):
+def describe(a, now):
     head = f"{a['home']} v {a['away']}\n{a['league']}, {when(a['start'])}"
     market = "" if a["market"] == "h2h" else f" ({a['market']})"
     if a["kind"] == "value":
         note = CFG.get("book_notes", {}).get(a["book"])
-        return (f"VALUE +{a['edge'] * 100:.1f}% at {book_name(a['book'])}\n{head}\n"
-                f"Bet: {a['outcome']}{market} @ {a['odds']:.2f}\n"
-                f"Fair price {a['fair']:.2f} ({a['source']}{', confirmed by exchange' if a['confirmed'] else ''})\n"
+        floor = (1 + (CFG["min_edge"] if a.get("sharp", True) else CFG["min_edge_consensus"])) / a["prob"]
+        rank = ""
+        if a.get("books_n"):
+            rank = (f"\nBest price of {a['books_n']} bookmakers" if a["rank"] == 1
+                    else f"\n{a['rank']}. best price of {a['books_n']} bookmakers")
+        weak = "" if a.get("sharp", True) else "\nNo sharp price for this game: fair price from the market average, half stake"
+        return (f"VALUE +{a['edge'] * 100:.1f}% at {book_name(a['book'])}\n{head} ({until_start(a['start'], now)})\n"
+                f"Bet: {a['outcome']}{market} @ {a['odds']:.2f}  (still value above {floor:.2f})\n"
+                f"Fair price {a['fair']:.2f} from {a['source']}{rank}{weak}\n"
                 f"Paper stake: {a['stake']:.2f} {CFG['currency']}"
-                + (f"\n{note}" if note else ""))
+                + (f"\n{note}" if note else "") + (f"\n{a['link']}" if a.get("link") else ""))
     legs = "\n".join(f"  {l['outcome']} @ {l['odds']:.2f} at {book_name(l['book'])}: {l['share'] * 100:.1f}% of the stake"
-                     for l in a["legs"])
-    return f"ARBITRAGE +{a['profit'] * 100:.2f}%{market}\n{head}\n{legs}"
+                     + (f"\n    {l['link']}" if l.get("link") else "") for l in a["legs"])
+    return f"ARBITRAGE +{a['profit'] * 100:.2f}%{market}\n{head} ({until_start(a['start'], now)})\n{legs}"
 
 
 def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hint=None, api=None):
@@ -155,10 +166,11 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
             settled += E.paper_settle(paper, [], now)      # voids games that never got a result
 
     # 3. fetch odds for as many leagues as the monthly credits allow
-    cost = len(CFG["markets"])
-    allowance = E.run_allowance(remaining, now, CFG, cost)
-    chosen = E.pick_leagues(candidates, last_scan, allowance, now)
-    print(f"credits left {remaining}, this run may fetch {allowance} league(s): {chosen or 'none'}")
+    cost = len(CFG["markets"]) * len(CFG["regions"].split(","))
+    chosen = E.plan_scan(candidates, last_scan, now, remaining, CFG, cost)
+    soon = [f"{c[0]} ({E.parse_time(c[2]).astimezone(ZoneInfo(CFG['timezone'])):%a %H:%M})" for c in candidates]
+    print(f"credits left {remaining}; leagues with games in the next {CFG['window_hours']}h: {', '.join(soon) or 'none'}")
+    print(f"fetching now: {chosen or 'none'}")
     fresh_alerts = []
     for league in chosen:
         events = fetch_odds(league, until)
@@ -191,7 +203,7 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
     if new:
         best = sorted(new, key=lambda a: -(a.get("edge") or a.get("profit")))[:8]
         more = f"\n\n(+{len(new) - 8} more on the dashboard)" if len(new) > 8 else ""
-        telegram("\n\n".join(describe(a) for a in best) + more
+        telegram("\n\n".join(describe(a, now) for a in best) + more
                  + "\n\nPrices move fast: check the price is still there before betting.")
     if settled:
         lines = [f"{b['home']} v {b['away']}: {b['outcome']} @ {b['odds']:.2f} {b['result'].upper()} "
@@ -202,7 +214,7 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
         updated=E.iso(now), board=board, last_scan=last_scan, seen=seen, paper=paper,
         summary=E.paper_summary(paper),
         quota={"remaining": remaining, "monthly": CFG["monthly_credits"], "runs_per_day": CFG["runs_per_day"]},
-        config={k: CFG[k] for k in ("currency", "timezone", "my_books", "book_notes", "manual_books", "min_edge",
+        config={k: CFG[k] for k in ("currency", "timezone", "my_books", "book_notes", "manual_books", "min_edge", "min_edge_consensus",
                                     "max_edge", "min_odds", "max_odds", "kelly_fraction", "max_stake_pct")},
         leagues_with_games=[c[0] for c in candidates], scanned_now=chosen,
     )
@@ -225,14 +237,13 @@ def main():
     if not key:
         sys.exit("ODDS_API_KEY is not set (add it as a repository secret, see odds/README.md)")
     api = Api(key)
-    books = ",".join(list(CFG["sharp_books"]) + list(CFG["exchange_books"]) + list(CFG["my_books"]))
-    if len(books.split(",")) > 10:
-        sys.exit("More than 10 bookmakers would double the credit cost of every request: trim config.json")
     run(now,
         lambda: {s["key"] for s in api.get("/sports")},
         lambda league, a, b: api.get(f"/sports/{league}/events", commenceTimeFrom=E.iso(a), commenceTimeTo=E.iso(b)),
-        lambda league, until: api.get(f"/sports/{league}/odds", bookmakers=books, markets=",".join(CFG["markets"]),
-                                      oddsFormat="decimal", commenceTimeTo=E.iso(until)),
+        # a whole region costs the same as a few named bookmakers, and the extra bookmakers
+        # give the market consensus and the "best price of N" check for free
+        lambda league, until: api.get(f"/sports/{league}/odds", regions=CFG["regions"], markets=",".join(CFG["markets"]),
+                                      oddsFormat="decimal", commenceTimeTo=E.iso(until), includeLinks="true"),
         lambda league: api.get(f"/sports/{league}/scores", daysFrom=3),
         api=api)
 

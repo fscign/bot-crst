@@ -99,7 +99,8 @@
          }
         ]
        }
-      ]
+      ],
+      "link": "https://www.coolbet.com/en/sports/match/x1"
      },
      {
       "key": "betsson",
@@ -120,6 +121,198 @@
          {
           "name": "Chelsea",
           "price": 3.6
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "unibet_eu",
+      "title": "unibet_eu",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.88
+         },
+         {
+          "name": "Draw",
+          "price": 3.43
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.71
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betclic_fr",
+      "title": "betclic_fr",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.89
+         },
+         {
+          "name": "Draw",
+          "price": 3.36
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.64
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "tipico_de",
+      "title": "tipico_de",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.94
+         },
+         {
+          "name": "Draw",
+          "price": 3.42
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.56
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "williamhill",
+      "title": "williamhill",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.86
+         },
+         {
+          "name": "Draw",
+          "price": 3.43
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.63
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "sport888",
+      "title": "sport888",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.95
+         },
+         {
+          "name": "Draw",
+          "price": 3.26
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.64
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betvictor",
+      "title": "betvictor",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.95
+         },
+         {
+          "name": "Draw",
+          "price": 3.3
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.75
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "leovegas_se",
+      "title": "leovegas_se",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.97
+         },
+         {
+          "name": "Draw",
+          "price": 3.26
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.54
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "onexbet",
+      "title": "onexbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Arsenal",
+          "price": 1.92
+         },
+         {
+          "name": "Draw",
+          "price": 3.45
+         },
+         {
+          "name": "Chelsea",
+          "price": 3.62
          }
         ]
        }
@@ -181,7 +374,8 @@
          }
         ]
        }
-      ]
+      ],
+      "link": "https://www.coolbet.com/en/sports/match/x2"
      },
      {
       "key": "betsson",
@@ -202,6 +396,198 @@
          {
           "name": "Everton",
           "price": 7.2
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "unibet_eu",
+      "title": "unibet_eu",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.34
+         },
+         {
+          "name": "Draw",
+          "price": 4.78
+         },
+         {
+          "name": "Everton",
+          "price": 7.08
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betclic_fr",
+      "title": "betclic_fr",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.34
+         },
+         {
+          "name": "Draw",
+          "price": 4.78
+         },
+         {
+          "name": "Everton",
+          "price": 7.29
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "tipico_de",
+      "title": "tipico_de",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.34
+         },
+         {
+          "name": "Draw",
+          "price": 4.72
+         },
+         {
+          "name": "Everton",
+          "price": 7.17
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "williamhill",
+      "title": "williamhill",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.36
+         },
+         {
+          "name": "Draw",
+          "price": 4.74
+         },
+         {
+          "name": "Everton",
+          "price": 7.08
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "sport888",
+      "title": "sport888",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.39
+         },
+         {
+          "name": "Draw",
+          "price": 4.82
+         },
+         {
+          "name": "Everton",
+          "price": 7.36
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betvictor",
+      "title": "betvictor",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.34
+         },
+         {
+          "name": "Draw",
+          "price": 4.95
+         },
+         {
+          "name": "Everton",
+          "price": 7.46
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "leovegas_se",
+      "title": "leovegas_se",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.33
+         },
+         {
+          "name": "Draw",
+          "price": 4.75
+         },
+         {
+          "name": "Everton",
+          "price": 7.4
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "onexbet",
+      "title": "onexbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Liverpool",
+          "price": 1.38
+         },
+         {
+          "name": "Draw",
+          "price": 4.93
+         },
+         {
+          "name": "Everton",
+          "price": 7.26
          }
         ]
        }
@@ -257,7 +643,8 @@
          }
         ]
        }
-      ]
+      ],
+      "link": "https://www.coolbet.com/en/sports/match/x3"
      },
      {
       "key": "betsson",
@@ -274,6 +661,166 @@
          {
           "name": "Miami Heat",
           "price": 2.45
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "unibet_eu",
+      "title": "unibet_eu",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.47
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.67
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betclic_fr",
+      "title": "betclic_fr",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.42
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.65
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "tipico_de",
+      "title": "tipico_de",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.47
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.7
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "williamhill",
+      "title": "williamhill",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.44
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.65
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "sport888",
+      "title": "sport888",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.4
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.6
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betvictor",
+      "title": "betvictor",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.47
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.63
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "leovegas_se",
+      "title": "leovegas_se",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.41
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.65
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "onexbet",
+      "title": "onexbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Boston Celtics",
+          "price": 1.46
+         },
+         {
+          "name": "Miami Heat",
+          "price": 2.67
          }
         ]
        }
@@ -326,6 +873,167 @@
          {
           "name": "Boston Bruins",
           "price": 1.92
+         }
+        ]
+       }
+      ],
+      "link": "https://www.coolbet.com/en/sports/match/x4"
+     },
+     {
+      "key": "unibet_eu",
+      "title": "unibet_eu",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.86
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.86
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betclic_fr",
+      "title": "betclic_fr",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.87
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.9
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "tipico_de",
+      "title": "tipico_de",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.87
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.86
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "williamhill",
+      "title": "williamhill",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.87
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.82
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "sport888",
+      "title": "sport888",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.82
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.9
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "betvictor",
+      "title": "betvictor",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.93
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.88
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "leovegas_se",
+      "title": "leovegas_se",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.86
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.83
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "onexbet",
+      "title": "onexbet",
+      "markets": [
+       {
+        "key": "h2h",
+        "last_update": "2026-11-14T11:56:00Z",
+        "outcomes": [
+         {
+          "name": "Toronto Maple Leafs",
+          "price": 1.87
+         },
+         {
+          "name": "Boston Bruins",
+          "price": 1.93
          }
         ]
        }

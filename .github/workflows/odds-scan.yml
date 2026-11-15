@@ -1,8 +1,9 @@
 name: Odds scan
 on:
-  # Six runs a day fit the free data plan (500 credits a month). See odds/README.md before changing.
+  # Every hour. The scanner itself decides how many credits each run may spend (see plan_scan in odds/engine.py),
+  # so quiet hours cost nothing and the hours before kick-off get more.
   schedule:
-    - cron: "17 */4 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
 concurrency:
   group: odds-scan

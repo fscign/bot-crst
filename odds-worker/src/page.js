@@ -31,6 +31,7 @@ td.hit{background:var(--hi);color:var(--good);font-weight:700}
 .kv{display:flex;gap:14px;flex-wrap:wrap;font-size:13px}.kv span{color:var(--mute)}
 .box{font-size:12.5px;margin-top:10px;padding:7px 9px;background:var(--bg);border-radius:8px;color:var(--mute)}
 .legs{margin:0 0 8px;padding:0;list-style:none;font-size:14px}.legs li{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+.go-link{font-size:12.5px;font-weight:600;color:var(--accent);margin-left:6px}
 .calc{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mute)}
 input{width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit;font-size:13px}
 button.go{padding:7px 12px;border:0;border-radius:6px;font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--accent);cursor:pointer}
@@ -70,13 +71,17 @@ function app() {
     const minEdge = S.config.min_edge;
     let h = "<h2>Value bets</h2>";
     h += values.length ? '<div class="grid">' + values.map((a) => {
-      const floor = (1 + minEdge) / a.prob, note = (S.config.book_notes || {})[a.book];
+      const sharp = a.sharp !== false, floor = (1 + (sharp ? minEdge : (S.config.min_edge_consensus ?? minEdge))) / a.prob, note = (S.config.book_notes || {})[a.book];
+      const rank = a.books_n ? (a.rank === 1 ? "Best price of " + a.books_n + " bookmakers" : a.rank + ". best of " + a.books_n + " bookmakers") : "";
       return '<div class="alert"><h3><span>' + esc(a.home) + " v " + esc(a.away) + '</span><span class="badge">' + pct(a.edge) + "</span></h3>"
         + '<div class="when">' + esc(a.league) + ", " + when(a.start) + "</div>"
-        + '<p class="pick">' + esc(a.outcome) + market(a.market) + " @ <b>" + od(a.odds) + "</b> at " + book(a.book) + "</p>"
+        + '<p class="pick">' + esc(a.outcome) + market(a.market) + " @ <b>" + od(a.odds) + "</b> at " + book(a.book)
+        + (a.link ? ' <a class="go-link" href="' + esc(a.link) + '" target="_blank" rel="noopener">Open</a>' : "") + "</p>"
         + '<div class="kv"><div><span>Fair price</span> ' + od(a.fair) + "</div><div><span>Still value above</span> " + od(floor)
         + "</div><div><span>Paper stake</span> " + money(a.stake) + " " + esc(S.config.currency) + "</div></div>"
-        + '<div class="box">Found ' + ago(a.found) + ", fair price from " + esc(a.source) + (a.confirmed ? ", confirmed by the exchange" : "")
+        + (rank ? '<div class="kv" style="margin-top:6px"><div>' + rank + "</div></div>" : "")
+        + '<div class="box">Found ' + ago(a.found) + ", fair price from " + esc(a.source)
+        + (sharp ? "" : ' <span class="warn">(no sharp price for this game, so a higher bar and half stake)</span>')
         + ". Check the price is still there before betting." + (note ? "<br>" + esc(note) : "") + "</div></div>";
     }).join("") + "</div>" : '<div class="card empty">No value bets right now. That is normal: most scans find none.</div>';
     h += "<h2>Arbitrage</h2>";
@@ -92,7 +97,8 @@ function app() {
   }
   function legs(a, total) {
     const pay = total * a.legs[0].share * a.legs[0].odds;
-    return a.legs.map((l) => "<li><span>" + esc(l.outcome) + " @ <b>" + od(l.odds) + "</b> at " + book(l.book) + "</span><b>" + money(total * l.share) + "</b></li>").join("")
+    return a.legs.map((l) => "<li><span>" + esc(l.outcome) + " @ <b>" + od(l.odds) + "</b> at " + book(l.book)
+      + (l.link ? ' <a class="go-link" href="' + esc(l.link) + '" target="_blank" rel="noopener">Open</a>' : "") + "</span><b>" + money(total * l.share) + "</b></li>").join("")
       + '<li class="mute"><span>Returns whichever way it ends</span><b class="pos">' + money(pay) + " (" + (pay - total >= 0 ? "+" : "") + money(pay - total) + ")</b></li>";
   }
 
@@ -127,6 +133,7 @@ function app() {
       + tile("Return on stakes", pct(s.roi), cls(s.roi)) + tile("Average closing line value", pct(s.avg_clv, 2), cls(s.avg_clv))
       + tile("Beat the closing line", s.beat_close == null ? "n/a" : Math.round(s.beat_close * 100) + "%") + "</div>";
     h += '<p class="note" style="margin:0 0 16px">The test places every value alert at the alerted price, since ' + when(P.started) + ". Judge it first by the closing line value: if the average stays above zero over 100+ bets, the alerts are finding real value. Win and loss need a few hundred bets before they mean anything. Expected profit on the settled bets so far: " + money(s.expected || 0) + cur + ".</p>";
+    h += breakdown(P);
     const head = '<tr><th>Game</th><th>Bet</th><th>Bookmaker</th><th class="num">Odds</th><th class="num">Edge</th><th class="num">Stake</th><th class="num">Closing line value</th>';
     const cells = (b) => "<td>" + esc(b.home) + " v " + esc(b.away) + '<br><small class="mute">' + esc(b.league) + ", " + when(b.start) + "</small></td><td>" + esc(b.outcome) + market(b.market) + "</td><td>" + book(b.book)
       + '</td><td class="num">' + od(b.odds) + '</td><td class="num">' + pct(b.edge) + '</td><td class="num">' + money(b.stake) + '</td><td class="num ' + cls(b.clv) + '">' + pct(b.clv, 2) + "</td>";
@@ -137,16 +144,40 @@ function app() {
     return h;
   }
 
+  // What is working: the same numbers split by bookmaker, league, edge size and price source.
+  // Closing line value is the column to trust first; profit needs far more bets.
+  function breakdown(P) {
+    const all = [...P.settled, ...P.open];
+    if (all.length < 5) return "";
+    const bucket = (e) => (e < 0.05 ? "3-5%" : e < 0.08 ? "5-8%" : "8%+");
+    const groups = [["Bookmaker", (b) => (S.config.my_books || {})[b.book] || b.book], ["League", (b) => b.league],
+      ["Edge at alert", (b) => bucket(b.edge)], ["Fair price from", (b) => (b.sharp === false ? "Market consensus" : "Sharp (Pinnacle / exchange)")]];
+    let h = '<div class="card"><h2>What is working</h2><p class="note" style="margin:0 0 10px">Small groups (under 30 bets) are mostly noise. Look for groups whose closing line value stays above zero as they grow.</p><div class="scroll"><table><tr><th>Group</th><th></th><th class="num">Bets</th><th class="num">Avg closing line value</th><th class="num">Beat the close</th><th class="num">Settled</th><th class="num">Profit</th><th class="num">Return</th></tr>';
+    for (const [title, key] of groups) {
+      const m = new Map();
+      for (const b of all) { const k = key(b); if (!m.has(k)) m.set(k, []); m.get(k).push(b); }
+      [...m.entries()].sort((x, y) => y[1].length - x[1].length).forEach(([k, bs], i) => {
+        const done = bs.filter((b) => b.result && b.result !== "void"), staked = done.reduce((t, b) => t + b.stake, 0), pnl = done.reduce((t, b) => t + b.pnl, 0);
+        const clv = bs.reduce((t, b) => t + b.clv, 0) / bs.length, beat = bs.filter((b) => b.clv > 0).length / bs.length;
+        h += "<tr" + (i === 0 ? ' class="first"' : "") + "><td>" + (i === 0 ? "<b>" + title + "</b>" : "") + "</td><td>" + esc(k) + '</td><td class="num">' + bs.length
+          + '</td><td class="num ' + cls(clv) + '">' + pct(clv, 2) + '</td><td class="num">' + Math.round(beat * 100) + '%</td><td class="num">' + done.length
+          + '</td><td class="num ' + cls(pnl) + '">' + (pnl >= 0 ? "+" : "") + money(pnl) + '</td><td class="num ' + cls(staked ? pnl : 0) + '">' + (staked ? pct(pnl / staked) : "n/a") + "</td></tr>";
+      });
+    }
+    return h + "</table></div></div>";
+  }
+
   function helpView() {
     const c = S.config;
-    return '<div class="card"><h2>What this does</h2><p>It does not predict games. It compares prices. Pinnacle and the Betfair Exchange take large bets from professionals, so their prices are the best public estimate of the real chances. The scanner removes their margin to get a <b>fair price</b> for every outcome, then looks at the bookmakers you can use.</p>'
+    return '<div class="card"><h2>What this does</h2><p>It does not predict games. It compares prices. Pinnacle and the Betfair Exchange take large bets from professionals, so their prices are the best public estimate of the real chances. The scanner removes their margin to get a <b>fair price</b> for every outcome (the average of both when both are available), then looks at the bookmakers you can use. When neither has a price, it uses the median of about 20 other European bookmakers instead, with a higher bar and half the stake.</p>'
       + '<ul class="plain"><li><b>Value bet</b>: your bookmaker pays at least ' + (c.min_edge * 100).toFixed(0) + "% more than the fair price. One bet can still lose; the edge shows over hundreds of bets.</li>"
       + "<li><b>Arbitrage</b>: your bookmakers disagree so much that backing every outcome returns more than the total stake.</li>"
       + "<li><b>Value from</b>: the lowest price that still counts as value. Use it to check any bookmaker that is not in the feed.</li></ul></div>"
       + '<div class="card"><h2>Rules the scanner applies</h2><ul class="plain"><li>Odds between ' + od(c.min_odds) + " and " + od(c.max_odds) + " only.</li>"
       + "<li>Edges above " + (c.max_edge * 100).toFixed(0) + "% are dropped: they are almost always an old or mistaken price, and bookmakers can cancel bets on obvious errors.</li>"
       + "<li>Both prices must have been refreshed in the last few minutes, and the game must not be about to start.</li>"
-      + "<li>When Pinnacle and the exchange are both available, the bet must be value against both.</li>"
+      + "<li>When Pinnacle and the exchange are both available, the bet must be value against each of them, not only their average.</li>"
+      + "<li>Scans run every hour. Credits are spent mostly in the 4 hours before kick-off, when prices move most and slower bookmakers lag behind; other leagues are refreshed about twice a day.</li>"
       + "<li>Paper stake: " + (c.kelly_fraction * 100).toFixed(0) + "% of the Kelly stake, never more than " + (c.max_stake_pct * 100).toFixed(0) + "% of the bankroll.</li></ul></div>"
       + '<div class="card"><h2>Before real money</h2><ul class="plain"><li>The feed is a few minutes behind. Always confirm the price on the bookmaker site first; if it has dropped below <b>Still value above</b>, skip it.</li>'
       + "<li>Bookmakers limit accounts that keep taking value prices. Round stakes and mainstream leagues draw less attention.</li>"

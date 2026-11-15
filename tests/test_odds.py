@@ -77,7 +77,11 @@ def test_exchange_fallback_and_confirm():
     _, values, _ = E.analyse(event(bf, soft), CFG, NOW, 1000)
     assert len(values) == 1 and values[0]["source"] == "betfair_ex_eu" and not values[0]["confirmed"]
     _, values, _ = E.analyse(event(book("pinnacle", PIN), bf, soft), CFG, NOW, 1000)
-    assert len(values) == 1 and values[0]["source"] == "pinnacle" and values[0]["confirmed"]
+    assert len(values) == 1 and values[0]["source"] == "pinnacle + betfair_ex_eu" and values[0]["confirmed"]
+    pin_p = E.devig_power(list(PIN.values()))[0]
+    mid = [(1 / b + 1 / l) / 2 for b, l in [(2.06, 2.08), (3.65, 3.7), (4.0, 4.1)]]
+    bf_p = mid[0] / sum(mid)
+    assert close(values[0]["prob"], round((pin_p + bf_p) / 2, 4), 2e-4), "fair price is the average of both references"
     wide = book("betfair_ex_eu", {"Arsenal": 1.9, "Draw": 3.0, "Chelsea": 3.5}, lay={"Arsenal": 2.3, "Draw": 4.2, "Chelsea": 4.6})
     assert E.analyse(event(wide, soft), CFG, NOW, 1000)[1] == [], "thin exchange market is ignored"
 
@@ -132,18 +136,63 @@ def test_paper():
     assert v[0]["result"] == "void" and p2["bankroll"] == 1000
 
 
+def soft_books(n, home=2.0, draw=3.4, away=3.6, updated=T):
+    return [book(f"soft{i}", {"Arsenal": home, "Draw": draw, "Chelsea": away}, updated=updated) for i in range(n)]
+
+
+def test_consensus_fallback():
+    mine = book("coolbet", {"Arsenal": 2.25, "Draw": 3.3, "Chelsea": 3.5})
+    _, values, _ = E.analyse(event(mine, *soft_books(8)), CFG, NOW, 1000)
+    p = E.devig_power([2.0, 3.4, 3.6])[0]
+    assert len(values) == 1 and not values[0]["sharp"] and values[0]["source"] == "consensus of 8 bookmakers"
+    assert close(values[0]["prob"], round(p, 4), 1e-4) and values[0]["edge"] >= CFG["min_edge_consensus"]
+    full = E.kelly_stake(2.25, p, 1000, CFG)
+    assert close(values[0]["stake"], E.kelly_stake(2.25, p, 500, CFG)) and values[0]["stake"] < full, "half stake without a sharp price"
+    small = book("coolbet", {"Arsenal": 2.15, "Draw": 3.3, "Chelsea": 3.5})          # +4%: enough with Pinnacle, not without
+    assert E.analyse(event(small, *soft_books(8)), CFG, NOW, 1000)[1] == []
+    assert E.analyse(event(mine, *soft_books(5)), CFG, NOW, 1000)[1] == [], "too few bookmakers for a consensus"
+    assert E.analyse(event(mine, *soft_books(8, updated=OLD)), CFG, NOW, 1000)[1] == [], "stale consensus"
+    # with a sharp price the consensus is not used: soft books lagging behind Pinnacle is the value itself
+    _, v, _ = E.analyse(event(book("pinnacle", PIN), mine, *soft_books(8, home=2.3)), CFG, NOW, 1000)
+    assert len(v) == 1 and v[0]["sharp"] and v[0]["source"] == "pinnacle"
+
+
+def test_rank_and_links():
+    mine = book("coolbet", {"Arsenal": 2.20, "Draw": 3.3, "Chelsea": 3.5})
+    mine["markets"][0]["outcomes"][0]["link"] = "https://coolbet.example/arsenal"
+    rows = soft_books(5, home=2.1) + [book("soft9", {"Arsenal": 2.25, "Draw": 3.3, "Chelsea": 3.5})]
+    _, v, _ = E.analyse(event(book("pinnacle", PIN), mine, *rows), CFG, NOW, 1000)
+    assert v[0]["rank"] == 2 and v[0]["books_n"] == 8 and v[0]["link"] == "https://coolbet.example/arsenal"
+    a = book("coolbet", {"Arsenal": 2.30, "Draw": 3.2, "Chelsea": 3.3})
+    a["link"] = "https://coolbet.example/game"
+    _, _, arbs = E.analyse(event(a, book("betsson", {"Arsenal": 1.95, "Draw": 3.9, "Chelsea": 4.4})), CFG, NOW, 1000)
+    assert arbs[0]["legs"][0]["link"] == "https://coolbet.example/game" and arbs[0]["legs"][1]["link"] is None
+
+
 def test_budget():
     first = datetime(2026, 11, 1, 0, 0, tzinfo=E.UTC)
     assert close(E.days_to_reset(first, 1), 30) and close(E.days_to_reset(NOW, 1), 16.5)
-    assert E.run_allowance(500, first, CFG) == 2            # 500 credits over 180 runs
-    assert E.run_allowance(20000, first, CFG) >= 100        # the paid plan covers every league every run
-    assert E.run_allowance(0, NOW, CFG) == 0
-    spent = sum(E.run_allowance(500, first, CFG) for _ in range(30 * CFG["runs_per_day"]))
-    assert spent <= 500, "never plans to spend more than the month's credits"
-    cands = [("a", 3, "2026-11-14T18:00:00Z"), ("b", 2, "2026-11-14T15:00:00Z"), ("c", 0, ""), ("d", 1, "2026-11-15T10:00:00Z")]
-    last = {"b": "2026-11-14T08:00:00Z", "d": "2026-11-14T04:00:00Z"}
-    assert E.pick_leagues(cands, last, 2, NOW) == ["a", "d"], "never scanned first, then the longest wait"
-    assert E.pick_leagues(cands, last, 9, NOW) == ["a", "d", "b"], "leagues with no games cost nothing"
+    at = lambda h: E.iso(NOW + timedelta(hours=h))                                    # noqa: E731
+    cands = [("epl", 5, at(2)), ("nba", 8, at(9)), ("nhl", 6, at(3)), ("liiga", 4, at(30)), ("cup", 0, ""), ("seriea", 3, at(1))]
+    # free plan, fresh month: share ~1.3 per run, so up to 3 hot leagues, soonest game first
+    assert E.plan_scan(cands, {}, NOW, 500, CFG) == ["seriea", "epl", "nhl"]
+    # a league fetched 20 minutes ago is not hot again yet; leagues far from kick-off wait for a quiet run
+    last = {"seriea": E.iso(NOW - timedelta(minutes=20))}
+    assert E.plan_scan(cands, last, NOW, 500, CFG) == ["epl", "nhl"]
+    quiet = [c for c in cands if c[0] in ("nba", "liiga")]
+    assert E.plan_scan(quiet, {"liiga": E.iso(NOW - timedelta(hours=20))}, NOW, 500, CFG) == ["nba"], "never fetched first"
+    assert E.plan_scan(quiet, {"nba": E.iso(NOW - timedelta(hours=2)), "liiga": E.iso(NOW - timedelta(hours=5))}, NOW, 500, CFG) == [], \
+        "nothing refreshed more than every 12 hours away from kick-off"
+    assert E.plan_scan(cands, {}, NOW, 0, CFG) == [] and E.plan_scan(cands, {}, NOW, 2, CFG) == [], "near zero: stop"
+    assert len(E.plan_scan(cands, {}, NOW, 20000, CFG)) == 5, "paid plan: everything with games"
+    # a month of hourly runs with games always about to start never spends more than it has
+    remaining, t, scans = 500, first, 0
+    while t < first + timedelta(days=30):
+        n = len(E.plan_scan([(f"l{i}", 3, E.iso(t + timedelta(hours=1))) for i in range(10)], {}, t, remaining, CFG))
+        remaining -= n
+        scans += n
+        t += timedelta(hours=1)
+    assert remaining >= 0 and scans > 450, (remaining, scans)
 
 
 if __name__ == "__main__":

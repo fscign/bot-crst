@@ -74,10 +74,13 @@ def normalize(event):
                 if not price or price <= 1.0:
                     continue
                 gkey = base if base == "h2h" else f"totals {abs(float(o.get('point', 0))):g}"
-                g = groups.setdefault(gkey, {"books": {}, "lay": {}, "updated": {}})
+                g = groups.setdefault(gkey, {"books": {}, "lay": {}, "updated": {}, "links": {}})
                 g["lay" if lay else "books"].setdefault(book, {})[o["name"]] = float(price)
                 if not lay:
                     g["updated"][book] = updated
+                    link = o.get("link") or m.get("link") or bm.get("link")
+                    if link:
+                        g["links"].setdefault(book, {})[o["name"]] = link
     for gkey, g in groups.items():
         # the full outcome list is the longest one any bookmaker shows (home, away and draw)
         longest = max(g["books"].values(), key=len, default={})
@@ -94,15 +97,10 @@ def fresh(updated, now, cfg):
     return updated is not None and now - updated <= timedelta(minutes=cfg["max_age_min"])
 
 
-def fair_probs(group, cfg, now):
-    """-> ({outcome: probability}, source, confirm) or (None, reason, None).
-
-    Main source: Pinnacle with the margin removed. Fallback: Betfair Exchange
-    midpoint. When both exist, the second is returned as `confirm`, so a value bet
-    has to look good against both of them.
-    """
-    names = group["outcomes"]
-    found = []
+def references(group, cfg, now):
+    """Sharp references: [(name, {outcome: probability})]. Pinnacle with its margin removed,
+    and the Betfair Exchange midpoint when the exchange market is deep enough to mean something."""
+    names, refs = group["outcomes"], []
     for book in cfg["sharp_books"]:
         prices = group["books"].get(book)
         if not prices or set(prices) != set(names) or len(names) < 2:
@@ -112,7 +110,7 @@ def fair_probs(group, cfg, now):
         margin = sum(1 / prices[n] for n in names) - 1
         if not 0 <= margin <= cfg["max_sharp_margin"]:
             continue
-        found.append((dict(zip(names, devig_power([prices[n] for n in names]))), book))
+        refs.append((book, dict(zip(names, devig_power([prices[n] for n in names])))))
     for book in cfg["exchange_books"]:
         back, lay = group["books"].get(book), group["lay"].get(book)
         if not back or not lay or set(back) != set(names) or set(lay) != set(names):
@@ -123,12 +121,56 @@ def fair_probs(group, cfg, now):
             continue                        # thin market, the midpoint means little
         mid = [(1 / back[n] + 1 / lay[n]) / 2 for n in names]
         s = sum(mid)
-        found.append(({n: m / s for n, m in zip(names, mid)}, book))
-    if not found:
-        return None, "no fresh sharp price", None
-    probs, source = found[0]
-    confirm = found[1][0] if len(found) > 1 else None
-    return probs, source, confirm
+        refs.append((book, {n: m / s for n, m in zip(names, mid)}))
+    return refs
+
+
+def consensus(group, cfg, now):
+    """Median fair probability across every other bookmaker in the feed. Weaker than a sharp
+    price (soft books copy each other), so it is only a fallback, with a higher bar."""
+    names = group["outcomes"]
+    skip = set(cfg["my_books"]) | set(cfg["sharp_books"]) | set(cfg["exchange_books"])
+    per = []
+    for book, prices in group["books"].items():
+        if book in skip or set(prices) != set(names) or not fresh(group["updated"].get(book), now, cfg):
+            continue
+        if 0 <= sum(1 / prices[n] for n in names) - 1 <= cfg["max_consensus_margin"]:
+            per.append(devig_power([prices[n] for n in names]))
+    if len(per) < cfg["min_consensus_books"]:
+        return None, len(per)
+    med = []
+    for i in range(len(names)):
+        col = sorted(p[i] for p in per)
+        k = len(col) // 2
+        med.append(col[k] if len(col) % 2 else (col[k - 1] + col[k]) / 2)
+    s = sum(med)
+    return {n: m / s for n, m in zip(names, med)}, len(per)
+
+
+def fair_probs(group, cfg, now):
+    """-> {"probs", "source", "refs", "min_edge", "sharp"} or {"probs": None, "source": reason}.
+
+    With sharp references the fair price is their average, and a value bet must also beat
+    each of them on its own. Without any, the market consensus is used with a higher bar."""
+    names = group["outcomes"]
+    refs = references(group, cfg, now)
+    if refs:
+        avg = [sum(r[n] for _, r in refs) / len(refs) for n in names]
+        s = sum(avg)
+        return {"probs": {n: a / s for n, a in zip(names, avg)}, "source": " + ".join(b for b, _ in refs),
+                "refs": [r for _, r in refs], "min_edge": cfg["min_edge"], "sharp": True}
+    cons, n = consensus(group, cfg, now)
+    if cons:
+        return {"probs": cons, "source": f"consensus of {n} bookmakers", "refs": [],
+                "min_edge": cfg["min_edge_consensus"], "sharp": False}
+    return {"probs": None, "source": "no fresh sharp price"}
+
+
+def market_rank(group, outcome, price, now, cfg):
+    """(rank, books): 1 means no bookmaker in the feed pays more. Exchanges are left out (commission)."""
+    others = [p[outcome] for b, p in group["books"].items()
+              if outcome in p and b not in cfg["exchange_books"] and fresh(group["updated"].get(b), now, cfg)]
+    return 1 + sum(o > price + 1e-9 for o in others), len(others)
 
 
 def kelly_stake(price, prob, bankroll, cfg):
@@ -156,7 +198,8 @@ def analyse(event, cfg, now, bankroll):
         names = g["outcomes"]
         if len(names) < 2:
             continue
-        probs, source, confirm = fair_probs(g, cfg, now)
+        fair = fair_probs(g, cfg, now)
+        probs, source = fair["probs"], fair["source"]
         market = {"market": gkey, "source": source if probs else None, "note": None if probs else source, "outcomes": []}
         for n in names:
             p = probs[n] if probs else None
@@ -164,27 +207,30 @@ def analyse(event, cfg, now, bankroll):
             best = max(prices, key=prices.get) if prices else None
             market["outcomes"].append({
                 "name": n, "prob": round(p, 4) if p else None, "fair": round(1 / p, 3) if p else None,
-                "value_from": round((1 + cfg["min_edge"]) / p, 2) if p else None,
+                "value_from": round((1 + fair["min_edge"]) / p, 2) if p else None,
                 "prices": prices, "best": best,
             })
             if not (probs and bettable):
                 continue
             for book, price in prices.items():
                 edge = price * p - 1
-                if edge < cfg["min_edge"] or not cfg["min_odds"] <= price <= cfg["max_odds"]:
+                if edge < fair["min_edge"] or not cfg["min_odds"] <= price <= cfg["max_odds"]:
                     continue
                 if edge > cfg["max_edge"]:
                     continue                # too good to be true: almost always a stale or mistaken price
                 if not fresh(g["updated"].get(book), now, cfg):
                     continue
-                if confirm and price * confirm[n] - 1 <= 0:
-                    continue                # the second sharp source disagrees
+                if any(price * r[n] - 1 <= 0 for r in fair["refs"]):
+                    continue                # one of the sharp references disagrees
+                rank, nbooks = market_rank(g, n, price, now, cfg)
                 values.append({
                     "kind": "value", "key": f"{event['id']}|{gkey}|{n}|{book}", "event": event["id"],
                     "sport": row["sport"], "league": row["league"], "home": row["home"], "away": row["away"],
                     "start": row["start"], "market": gkey, "outcome": n, "book": book, "odds": price,
                     "prob": round(p, 4), "fair": round(1 / p, 3), "edge": round(edge, 4), "source": source,
-                    "confirmed": bool(confirm), "stake": kelly_stake(price, p, bankroll, cfg), "found": iso(now),
+                    "sharp": fair["sharp"], "confirmed": len(fair["refs"]) > 1, "rank": rank, "books_n": nbooks,
+                    "link": g["links"].get(book, {}).get(n),
+                    "stake": kelly_stake(price, p, bankroll * (1 if fair["sharp"] else 0.5), cfg), "found": iso(now),
                 })
         row["markets"].append(market)
 
@@ -206,8 +252,8 @@ def analyse(event, cfg, now, bankroll):
                         "kind": "arb", "key": f"{event['id']}|{gkey}|arb", "event": event["id"], "sport": row["sport"],
                         "league": row["league"], "home": row["home"], "away": row["away"], "start": row["start"],
                         "market": gkey, "profit": round(profit, 4), "found": iso(now),
-                        "legs": [{"outcome": n, "book": b, "odds": price, "share": round((1 / price) / inv, 4)}
-                                 for n, price, b in legs],
+                        "legs": [{"outcome": n, "book": b, "odds": price, "share": round((1 / price) / inv, 4),
+                                  "link": g["links"].get(b, {}).get(n)} for n, price, b in legs],
                     })
     return row, values, arbs
 
@@ -231,6 +277,7 @@ def paper_place(paper, alerts):
         taken.add(k)
         bet = {f: a[f] for f in ("key", "event", "sport", "league", "home", "away", "start", "market", "outcome",
                                  "book", "odds", "prob", "edge", "stake")}
+        bet["sharp"] = a.get("sharp", True)
         bet.update(placed=a["found"], close_fair=a["fair"], clv=round(a["odds"] / a["fair"] - 1, 4))
         paper["open"].append(bet)
         placed.append(bet)
@@ -326,18 +373,27 @@ def days_to_reset(now, reset_day):
     return max((nxt - now).total_seconds() / 86400, 1 / 24)
 
 
-def run_allowance(remaining, now, cfg, cost_per_league=1):
-    """How many leagues this run may fetch so the credits last until the monthly reset."""
+def plan_scan(candidates, last_scan, now, remaining, cfg, cost=1):
+    """Which leagues to fetch this run. candidates: [(league, games_in_window, first_start)].
+
+    Prices move most, and soft bookmakers lag most, in the last hours before kick-off (team news,
+    late money). The closing price there is also what the paper test is judged against. So:
+      1. "hot" leagues, with a game in the next few hours and not fetched in the last ~hour,
+         soonest first, may take up to `burst` times this run's fair share of credits;
+      2. other leagues are refreshed every `refresh_hours`, within the plain fair share.
+    The fair share is recalculated from the real remaining credits every run, so a busy Saturday
+    borrows from quiet hours and the month can never overspend.
+    """
     runs_left = max(1, math.ceil(days_to_reset(now, cfg["quota_reset_day"]) * cfg["runs_per_day"]))
-    return max(0, int(remaining // (runs_left * cost_per_league)))
-
-
-def pick_leagues(candidates, last_scan, allowance, now):
-    """candidates: [(league, games_in_window, first_start)]. Longest-unscanned first, then the soonest game."""
+    share = remaining / (runs_left * cost)
+    cap = int(remaining // cost)
+    since = lambda lg: (now - parse_time(last_scan[lg])).total_seconds() / 60 if last_scan.get(lg) else float("inf")  # noqa: E731
     live = [c for c in candidates if c[1] > 0]
-
-    def rank(c):
-        seen = parse_time(last_scan.get(c[0]))
-        waited = (now - seen).total_seconds() if seen else float("inf")
-        return (-waited, c[2])
-    return [c[0] for c in sorted(live, key=rank)[:allowance]]
+    hot = sorted((c for c in live if parse_time(c[2]) - now <= timedelta(hours=cfg["hot_hours"])
+                  and since(c[0]) >= cfg["hot_rescan_min"]), key=lambda c: c[2])
+    hot_ids = {c[0] for c in hot}
+    stale = sorted((c for c in live if c[0] not in hot_ids and since(c[0]) >= cfg["refresh_hours"] * 60),
+                   key=lambda c: (-since(c[0]), c[2]))
+    n_hot = min(len(hot), int(share * cfg["burst"] + 1e-9), cap)
+    n_stale = min(len(stale), max(0, int(share + 1e-9) - n_hot), cap - n_hot)
+    return [c[0] for c in hot[:n_hot]] + [c[0] for c in stale[:n_stale]]
