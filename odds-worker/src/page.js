@@ -47,7 +47,7 @@ export const LOGIN = `<!doctype html><html lang="en"><head><meta charset="utf-8"
 <form method="post" action="/login" style="display:flex;gap:8px"><input type="password" name="password" placeholder="Password" style="flex:1;width:auto" autofocus>
 <button class="go">Sign in</button></form></div></main></body></html>`;
 
-// Everything below runs in the browser.
+// Everything below runs in the browser. Cloudflare's build wraps functions in __name(), so the page defines it.
 function app() {
   let S = null, view = ({ "#games": "games", "#paper": "paper", "#help": "help" })[location.hash] || "alerts";
   const $ = (s) => document.querySelector(s);
@@ -184,4 +184,4 @@ export const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Odds watch</title><style>${CSS}</style></head><body><main>
 <h1>Odds watch</h1><p class="sub" id="status">Loading</p>
 <div class="seg"><button data-v="alerts">Alerts</button><button data-v="games">All games</button><button data-v="paper">Paper test</button><button data-v="help">How it works</button></div>
-<div id="app"></div></main><script>(${app.toString()})()</script></body></html>`;
+<div id="app"></div></main><script>var __name=function(f){return f};(${app.toString()})()</script></body></html>`;
