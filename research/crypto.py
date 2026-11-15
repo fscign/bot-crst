@@ -52,6 +52,7 @@ def sim(o, h, l, c, atr, entry, exit_sig, side, stop_m, trail_m, target_r, max_h
     e_idx = np.empty(n, np.int64)
     r_out = np.empty(n, np.float64)
     sf_out = np.empty(n, np.float64)
+    bars = np.empty(n, np.int64)
     k = 0
     free = 0
     for i in range(n - 1):
@@ -96,9 +97,10 @@ def sim(o, h, l, c, atr, entry, exit_sig, side, stop_m, trail_m, target_r, max_h
         e_idx[k] = e
         r_out[k] = side * (exitp - ep) / S
         sf_out[k] = S / ep
+        bars[k] = j - e + 1
         k += 1
         free = j
-    return e_idx[:k], r_out[:k], sf_out[:k]
+    return e_idx[:k], r_out[:k], sf_out[:k], bars[:k]
 
 
 def families(d: pd.DataFrame, rng, tf: str) -> list:
@@ -150,7 +152,7 @@ def run_asset(df, tf, btc_up, rng, sink, allow=None):
             ent &= allow.reindex(d.index.normalize()).fillna(False).values.astype(np.bool_)
         xs = exit_sig.fillna(False).values.astype(np.bool_)
         for name, stop_m, trail_m, target_r, max_hold in exits:
-            ei, r, sf = sim(o, h, l, c, atr, ent, xs, side, stop_m, trail_m, target_r, max_hold)
+            ei, r, sf, _ = sim(o, h, l, c, atr, ent, xs, side, stop_m, trail_m, target_r, max_hold)
             if len(ei):
                 sink.setdefault((tf, fam, name), []).append(np.column_stack([t[ei], r, sf, gate[ei]]))
 

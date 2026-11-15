@@ -192,7 +192,7 @@ async function ingest(request, env) {
     }
   }
   const writes = [env.KV.put("results", text),
-    putJSON(env, "meta", { watch, risk: data.risk || { stop_atr: 2, target_atr: 3 } })];
+    putJSON(env, "meta", { watch, risk: data.risk || { stop_atr: 2, target_atr: 3 }, last_scan: Date.now() })];
   const notes = [];
   if (paperIn) {
     // ignore results from a scan that started before the test was reset
@@ -260,6 +260,38 @@ async function dispatchScan(env) {
   if (!r.ok) console.log("scan dispatch failed", r.status, await r.text());
 }
 
+// ---- unattended running: weekly report and a warning when scans stop arriving --------
+function accountLine(a) {
+  if (!a || a.balance == null) return null;
+  const st = a.stats || {}, eq = a.equity ?? a.balance, ret = (eq / a.start - 1) * 100;
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const week = (a.closed || []).filter((t) => t.closed >= weekAgo);
+  const weekPnl = week.reduce((s, t) => s + t.pnl, 0);
+  const paused = (a.rules_text || []).filter((x) => x.includes("PAUSED")).map((x) => x.split(":")[0]);
+  return `${a.title || "Account"}\n  equity ${fmt(eq)} USD (${ret >= 0 ? "+" : ""}${ret.toFixed(2)}% since start), worst drop ${st.max_dd_pct ?? 0}%\n`
+    + `  this week: ${week.length} closed, ${weekPnl >= 0 ? "+" : ""}${weekPnl.toFixed(2)} USD; open now: ${(a.open || []).length}\n`
+    + `  all closed trades: ${st.trades || 0}, won ${st.trades ? Math.round((st.wins / st.trades) * 100) : 0}%, average ${st.trades ? (st.sum_r / st.trades).toFixed(2) : "0"}R per trade`
+    + (paused.length ? `\n  PAUSED by the monthly backtest: ${paused.join("; ")}` : "");
+}
+
+async function weeklyReport(env) {
+  const P = await getJSON(env, "paper", null);
+  if (!P) return;
+  const lines = [P, ...Object.values(P.accounts || {})].map(accountLine).filter(Boolean);
+  if (lines.length) await telegram(env, "Weekly report (paper test accounts)\n\n" + lines.join("\n\n")
+    + "\n\nJudge the rules on 50+ closed trades, not on one week. Backtest expectation for stocks: about +0.1R per trade.");
+}
+
+async function stallCheck(env) {
+  const meta = await getJSON(env, "meta", {});
+  if (!meta.last_scan) return;
+  const hours = (Date.now() - meta.last_scan) / 36e5;
+  if (hours > 3 && !meta.stall_alerted) {
+    await putJSON(env, "meta", { ...meta, stall_alerted: true });
+    await telegram(env, `Warning: no market scan has arrived for ${hours.toFixed(1)} hours. Check the Actions tab of the GitHub repo (Scan markets). A common cause is an expired GH_DISPATCH_TOKEN.`);
+  }
+}
+
 // ---- router --------------------------------------------------------------------
 export default {
   async fetch(request, env) {
@@ -312,7 +344,10 @@ export default {
   // every minute: check open positions and alert on changes
   async scheduled(event, env, ctx) {
     const minute = new Date(event.scheduledTime).getUTCMinutes();
+    const when = new Date(event.scheduledTime);
     if (minute % 15 === 0) ctx.waitUntil(dispatchScan(env));
+    if (minute % 30 === 7) ctx.waitUntil(stallCheck(env));
+    if (when.getUTCDay() === 0 && when.getUTCHours() === 17 && minute === 0) ctx.waitUntil(weeklyReport(env));
     ctx.waitUntil(checkPositions(env));
   },
 };

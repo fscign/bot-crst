@@ -263,6 +263,19 @@ def load_verdicts() -> dict:
     return out
 
 
+def pause_stale_rules(cfg: dict, verdicts: dict) -> None:
+    """Self-check: a paper rule tied to a backtest verdict stops opening trades when the latest
+    monthly backtest no longer shows a profit for that kind of signal in both halves of history."""
+    accounts = [cfg.get("paper", {})] + list(cfg.get("paper", {}).get("accounts", {}).values())
+    for acc in accounts:
+        for rule in acc.get("rules", []):
+            key = rule.get("verdict_key")
+            v = verdicts.get(tuple(key)) if key else None
+            rule["paused"] = bool(v and (v["is"] <= 0 or v["oos"] <= 0))
+            if rule["paused"]:
+                print(f"Rule paused by the backtest: {rule['name']} ({v})")
+
+
 def verdict_for(it: dict, verdicts: dict) -> dict | None:
     fam = "score55" if it["label"].startswith("STRONG") else "score40"
     return verdicts.get((paper.market_of(it), it["tf"], "long" if it["score"] > 0 else "short", fam))
@@ -450,6 +463,7 @@ def main() -> None:
     # ---- build the output: actionable signals, ranked, plus watched positions
     items, watched, labels, everything = [], {}, {}, []
     verdicts = load_verdicts()
+    pause_stale_rules(cfg, verdicts)
     for s, n, k, fr in scored:
         it = build_item(s, n, k, fr, news.get(s), cfg)
         it["bt"] = verdict_for(it, verdicts) if it["label"] != "HOLD" else None

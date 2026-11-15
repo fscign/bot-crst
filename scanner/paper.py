@@ -96,6 +96,8 @@ def rule_for(it: dict, cfg: dict) -> dict | None:
     m = market_of(it)
     for rule in cfg["rules"]:
         if m in rule["markets"] and it["tf"] == rule["tf"]:
+            if rule.get("paused"):
+                continue                                  # lost its edge in the latest backtest: no new trades
             if rule.get("max_volume_rank") and (it.get("rank") or 10**9) > rule["max_volume_rank"]:
                 continue                                  # only the most traded coins, as in the research
             trigger = rule.get("trigger", "tech")
@@ -288,7 +290,9 @@ def rules_text(cfg: dict) -> list[str]:
             entry += ", only while " + " and ".join(need)
         flips = flips or r.get("flip_exit", True)
         out.append(f"{r['name']}: {entry}; risk {r['risk_pct']}% of the account per trade; exit: {how}; "
-                   f"time limit {r['max_hold_bars']} bars.")
+                   f"time limit {r['max_hold_bars']} bars."
+                   + (" PAUSED: this kind of signal stopped making money in the latest monthly backtest, "
+                      "so no new trades are opened until it recovers." if r.get("paused") else ""))
     out.append(f"No leverage per position. All open positions together are capped at {cfg['max_exposure']}x the "
                f"account, one position at {cfg['max_position_pct']}% of it. One open trade per asset.")
     out.append(("Also closes when the signal flips to SELL. " if flips else "")

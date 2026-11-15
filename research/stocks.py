@@ -50,9 +50,9 @@ def run_stock(df, market, gate, rng, sink):
         ent = entry.fillna(False).values.astype(np.bool_)
         xs = exit_sig.fillna(False).values.astype(np.bool_)
         for name, stop_m, trail_m, target_r, max_hold in exits:
-            ei, r, sf = cr.sim(o, h, l, c, atr, ent, xs, side, stop_m, trail_m, target_r, max_hold)
+            ei, r, sf, held = cr.sim(o, h, l, c, atr, ent, xs, side, stop_m, trail_m, target_r, max_hold)
             if len(ei):
-                sink.setdefault((market, fam, name), []).append(np.column_stack([t[ei], r, sf, g[ei]]))
+                sink.setdefault((market, fam, name), []).append(np.column_stack([t[ei], r, sf, g[ei], held]))
 
 
 def main() -> None:
@@ -76,6 +76,24 @@ def main() -> None:
     tab = cr.trade_table(sink).rename(columns={"tf": "market"})
     tab["filter"] = tab["filter"].str.replace("btc_", "spx_")
     tab[tab.fee == 0.05].to_csv(OUT / ("stock_trades_demo.csv" if demo else "stock_trades.csv"), index=False)
+
+    # Efficiency: rules with wider stops hold longer, so results per trade are not comparable.
+    # Per period: average % per trade, average bars held, and % earned per bar in the market.
+    rows = []
+    for (market, fam, ex), parts in sink.items():
+        a = np.concatenate(parts)
+        pct = (a[:, 1] * a[:, 2] - 2 * 0.0005) * 100
+        lo, hi = a[:, 0].min(), a[:, 0].max()
+        c1, c2 = lo + cr.CUTS[0] * (hi - lo), lo + cr.CUTS[1] * (hi - lo)
+        row = {"market": market, "family": fam, "exit": ex}
+        for seg, m in (("A", a[:, 0] < c1), ("B", (a[:, 0] >= c1) & (a[:, 0] < c2)), ("C", a[:, 0] >= c2)):
+            if m.sum() > 2:
+                row.update({f"{seg}_pct_per_trade": round(pct[m].mean(), 3), f"{seg}_bars": round(a[m, 4].mean(), 1),
+                            f"{seg}_pct_per_bar": round(pct[m].sum() / a[m, 4].sum(), 4),
+                            f"{seg}_worst_trade_pct": round(pct[m].min(), 1)})
+        rows.append(row)
+    pd.DataFrame(rows).sort_values(["market", "family", "exit"]).to_csv(
+        OUT / ("stock_efficiency_demo.csv" if demo else "stock_efficiency.csv"), index=False)
 
 
 if __name__ == "__main__":
