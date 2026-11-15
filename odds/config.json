@@ -1,11 +1,14 @@
 {
   "currency": "EUR",
   "timezone": "Europe/Tallinn",
-  "my_books": {"coolbet": "Coolbet", "betsson": "Betsson/Betsafe"},
-  "book_notes": {"betsson": "Price is from Betsson. Betsafe.ee is the same group and usually matches, confirm it there before betting."},
-  "manual_books": ["Olybet", "Optibet"],
+  "my_books": {"coolbet": "Coolbet", "betsson": "Betsson/Betsafe", "unibet_se": "Unibet"},
+  "book_notes": {
+    "betsson": "Price is from Betsson. Betsafe.ee is the same group and usually matches, confirm it there before betting.",
+    "unibet_se": "Price is from Unibet's Swedish site. Unibet.ee usually matches, confirm it there before betting."
+  },
+  "manual_books": ["Olybet", "Optibet", "Bet365", "Paf", "Tonybet"],
   "sharp_books": ["pinnacle"],
-  "exchange_books": ["betfair_ex_eu"],
+  "exchange_books": ["betfair_ex_eu", "matchbook"],
   "regions": "eu",
   "leagues": [
       "soccer_uefa_champs_league",

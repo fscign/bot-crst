@@ -169,6 +169,26 @@ def test_rank_and_links():
     assert arbs[0]["legs"][0]["link"] == "https://coolbet.example/game" and arbs[0]["legs"][1]["link"] is None
 
 
+def test_market_shape_and_trend():
+    # hockey: the sharp price is 2-way (overtime included), one bookmaker quotes 3-way regulation time
+    two = {"Arsenal": 1.80, "Chelsea": 2.10}
+    three = book("coolbet", {"Arsenal": 2.40, "Draw": 4.0, "Chelsea": 2.9})
+    others = [book(f"s{i}", {"Arsenal": 1.75, "Chelsea": 2.0}) for i in range(8)]
+    _, v, a = E.analyse(event(book("pinnacle", two), three, book("betsson", {"Arsenal": 1.7, "Chelsea": 2.0}), *others), CFG, NOW, 1000)
+    assert v == [] and a == [], "a 3-way price is never compared with a 2-way fair price"
+    ev = event(book("pinnacle", PIN), book("coolbet", {"Arsenal": 2.20, "Draw": 3.3, "Chelsea": 3.5}))
+    row, values, _ = E.analyse(ev, CFG, NOW, 1000)
+    older = json.loads(json.dumps(row))
+    older["markets"][0]["outcomes"][0]["fair"] = 2.20                       # was longer: shortened towards the bet
+    E.add_trend(values, [row], [older])
+    assert values[0]["trend"] == "toward" and values[0]["prev_fair"] == 2.20
+    older["markets"][0]["outcomes"][0]["fair"] = 1.95
+    E.add_trend(values, [row], [older])
+    assert values[0]["trend"] == "away"
+    E.add_trend(values, [row], [])
+    assert values[0]["trend"] is None
+
+
 def test_budget():
     first = datetime(2026, 11, 1, 0, 0, tzinfo=E.UTC)
     assert close(E.days_to_reset(first, 1), 30) and close(E.days_to_reset(NOW, 1), 16.5)
@@ -180,9 +200,13 @@ def test_budget():
     last = {"seriea": E.iso(NOW - timedelta(minutes=20))}
     assert E.plan_scan(cands, last, NOW, 500, CFG) == ["epl", "nhl"]
     quiet = [c for c in cands if c[0] in ("nba", "liiga")]
-    assert E.plan_scan(quiet, {"liiga": E.iso(NOW - timedelta(hours=20))}, NOW, 500, CFG) == ["nba"], "never fetched first"
+    assert E.plan_scan(quiet, {"liiga": E.iso(NOW - timedelta(hours=20))}, NOW, 500, CFG) == ["nba", "liiga"], "never fetched first; 20 idle hours saved enough for both"
     assert E.plan_scan(quiet, {"nba": E.iso(NOW - timedelta(hours=2)), "liiga": E.iso(NOW - timedelta(hours=5))}, NOW, 500, CFG) == [], \
         "nothing refreshed more than every 12 hours away from kick-off"
+    # start of the month on the free plan: under one league per run, yet quiet leagues still get refreshed
+    first_quiet = [("nba", 8, E.iso(first + timedelta(hours=9)))]
+    assert E.plan_scan(first_quiet, {"x": E.iso(first - timedelta(minutes=30))}, first, 500, CFG) == [], "just fetched: wait"
+    assert E.plan_scan(first_quiet, {"x": E.iso(first - timedelta(hours=3))}, first, 500, CFG) == ["nba"], "saved-up share"
     assert E.plan_scan(cands, {}, NOW, 0, CFG) == [] and E.plan_scan(cands, {}, NOW, 2, CFG) == [], "near zero: stop"
     assert len(E.plan_scan(cands, {}, NOW, 20000, CFG)) == 5, "paid plan: everything with games"
     # a month of hourly runs with games always about to start never spends more than it has

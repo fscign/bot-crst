@@ -173,6 +173,20 @@ def market_rank(group, outcome, price, now, cfg):
     return 1 + sum(o > price + 1e-9 for o in others), len(others)
 
 
+def add_trend(alerts, rows, previous_rows):
+    """How the fair price moved since the previous scan of this league. A fair price shortening
+    towards the bet means the sharp market moved and this bookmaker has not followed yet (the
+    best kind of value); one drifting away means the gap may be closing by itself."""
+    before = {(r["id"], m["market"], o["name"]): o["fair"] for r in previous_rows for m in r["markets"]
+              for o in m["outcomes"] if o.get("fair")}
+    for a in alerts:
+        if a["kind"] != "value":
+            continue
+        prev = before.get((a["event"], a["market"], a["outcome"]))
+        a["prev_fair"] = prev
+        a["trend"] = None if not prev else "toward" if a["fair"] < prev * 0.99 else "away" if a["fair"] > prev * 1.01 else "flat"
+
+
 def kelly_stake(price, prob, bankroll, cfg):
     """Quarter Kelly by default, capped: the fair price is itself an estimate."""
     edge = price * prob - 1
@@ -203,7 +217,7 @@ def analyse(event, cfg, now, bankroll):
         market = {"market": gkey, "source": source if probs else None, "note": None if probs else source, "outcomes": []}
         for n in names:
             p = probs[n] if probs else None
-            prices = {b: g["books"][b][n] for b in mine if n in g["books"].get(b, {})}
+            prices = {b: g["books"][b][n] for b in mine if set(g["books"].get(b, {})) == set(names)}
             best = max(prices, key=prices.get) if prices else None
             market["outcomes"].append({
                 "name": n, "prob": round(p, 4) if p else None, "fair": round(1 / p, 3) if p else None,
@@ -239,7 +253,7 @@ def analyse(event, cfg, now, bankroll):
             legs = []
             for n in names:
                 cands = [(g["books"][b][n], b) for b in mine
-                         if n in g["books"].get(b, {}) and fresh(g["updated"].get(b), now, cfg)]
+                         if set(g["books"].get(b, {})) == set(names) and fresh(g["updated"].get(b), now, cfg)]
                 if not cands:
                     legs = []
                     break
@@ -278,6 +292,7 @@ def paper_place(paper, alerts):
         bet = {f: a[f] for f in ("key", "event", "sport", "league", "home", "away", "start", "market", "outcome",
                                  "book", "odds", "prob", "edge", "stake")}
         bet["sharp"] = a.get("sharp", True)
+        bet["trend"] = a.get("trend")
         bet.update(placed=a["found"], close_fair=a["fair"], clv=round(a["odds"] / a["fair"] - 1, 4))
         paper["open"].append(bet)
         placed.append(bet)
@@ -394,6 +409,10 @@ def plan_scan(candidates, last_scan, now, remaining, cfg, cost=1):
     hot_ids = {c[0] for c in hot}
     stale = sorted((c for c in live if c[0] not in hot_ids and since(c[0]) >= cfg["refresh_hours"] * 60),
                    key=lambda c: (-since(c[0]), c[2]))
-    n_hot = min(len(hot), int(share * cfg["burst"] + 1e-9), cap)
-    n_stale = min(len(stale), max(0, int(share + 1e-9) - n_hot), cap - n_hot)
+    # runs since anything was fetched: their unspent share carries over, so a share below one
+    # league per run (start of the month on the free plan) still gets leagues refreshed
+    latest = min((since(lg) for lg in last_scan), default=0)
+    idle = min(max(1.0, latest * cfg["runs_per_day"] / 1440), cfg["refresh_hours"] * cfg["runs_per_day"] / 24)
+    n_hot = min(len(hot), max(int(share * cfg["burst"] + 1e-9), int(share * idle + 1e-9)), cap)
+    n_stale = min(len(stale), max(0, int(share * idle + 1e-9) - n_hot), cap - n_hot)
     return [c[0] for c in hot[:n_hot]] + [c[0] for c in stale[:n_stale]]

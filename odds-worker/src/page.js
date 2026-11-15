@@ -81,6 +81,7 @@ function app() {
         + "</div><div><span>Paper stake</span> " + money(a.stake) + " " + esc(S.config.currency) + "</div></div>"
         + (rank ? '<div class="kv" style="margin-top:6px"><div>' + rank + "</div></div>" : "")
         + '<div class="box">Found ' + ago(a.found) + ", fair price from " + esc(a.source)
+        + (a.trend === "toward" ? '. <span class="pos">Fair price shortened from ' + od(a.prev_fair) + " since the last scan, this bookmaker has not followed yet</span>" : a.trend === "away" ? '. <span class="warn">Fair price drifted out from ' + od(a.prev_fair) + " since the last scan, the gap is shrinking</span>" : "")
         + (sharp ? "" : ' <span class="warn">(no sharp price for this game, so a higher bar and half stake)</span>')
         + ". Check the price is still there before betting." + (note ? "<br>" + esc(note) : "") + "</div></div>";
     }).join("") + "</div>" : '<div class="card empty">No value bets right now. That is normal: most scans find none.</div>';
@@ -151,7 +152,8 @@ function app() {
     if (all.length < 5) return "";
     const bucket = (e) => (e < 0.05 ? "3-5%" : e < 0.08 ? "5-8%" : "8%+");
     const groups = [["Bookmaker", (b) => (S.config.my_books || {})[b.book] || b.book], ["League", (b) => b.league],
-      ["Edge at alert", (b) => bucket(b.edge)], ["Fair price from", (b) => (b.sharp === false ? "Market consensus" : "Sharp (Pinnacle / exchange)")]];
+      ["Edge at alert", (b) => bucket(b.edge)], ["Fair price from", (b) => (b.sharp === false ? "Market consensus" : "Sharp (Pinnacle / exchange)")],
+      ["Fair price before the alert", (b) => ({ toward: "Moving toward the bet", away: "Moving away", flat: "Not moving" })[b.trend] || "First scan of the game"]];
     let h = '<div class="card"><h2>What is working</h2><p class="note" style="margin:0 0 10px">Small groups (under 30 bets) are mostly noise. Look for groups whose closing line value stays above zero as they grow.</p><div class="scroll"><table><tr><th>Group</th><th></th><th class="num">Bets</th><th class="num">Avg closing line value</th><th class="num">Beat the close</th><th class="num">Settled</th><th class="num">Profit</th><th class="num">Return</th></tr>';
     for (const [title, key] of groups) {
       const m = new Map();

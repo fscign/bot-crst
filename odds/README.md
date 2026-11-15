@@ -16,9 +16,14 @@ has a price, the median of the other European bookmakers is used instead, with a
 **Arbitrage** is when your bookmakers disagree enough that backing every outcome returns more than the total stake.
 Each alert also says where the price ranks among all bookmakers in the feed, and links to the bet where the feed has a link.
 
-Covered automatically: **Coolbet** and **Betsson** (same group as Betsafe; confirm the price on betsafe.ee).
-**Olybet** and **Optibet** are not in the data feed: on the dashboard's "All games" tab, compare their price with the
-"Value from" column by hand.
+Covered automatically: **Coolbet**, **Betsson** (same group as Betsafe; confirm the price on betsafe.ee) and **Unibet**
+(the feed has Unibet's Swedish site; confirm the price on unibet.ee). No Unibet account? Remove `unibet_se` from
+`my_books` in `odds/config.json`.
+**Olybet**, **Optibet**, **Bet365**, **Paf** and **Tonybet** are licensed in Estonia but not in the data feed: on the
+dashboard's "All games" tab, compare their price with the "Value from" column by hand.
+
+Each value alert also says how the fair price moved since the previous scan. "Shortened towards the bet" means the sharp
+market moved and the bookmaker has not followed yet, the strongest kind of alert. The paper test tracks these separately.
 
 ## Setup (10 minutes, on top of the trading bot setup)
 

@@ -115,10 +115,12 @@ def describe(a, now):
         if a.get("books_n"):
             rank = (f"\nBest price of {a['books_n']} bookmakers" if a["rank"] == 1
                     else f"\n{a['rank']}. best price of {a['books_n']} bookmakers")
+        trend = {"toward": f"\nFair price shortened from {a.get('prev_fair') or 0:.2f} since the last scan: this bookmaker has not followed yet",
+                 "away": f"\nFair price drifted out from {a.get('prev_fair') or 0:.2f} since the last scan: the gap is shrinking, be quick or skip"}.get(a.get("trend"), "")
         weak = "" if a.get("sharp", True) else "\nNo sharp price for this game: fair price from the market average, half stake"
         return (f"VALUE +{a['edge'] * 100:.1f}% at {book_name(a['book'])}\n{head} ({until_start(a['start'], now)})\n"
                 f"Bet: {a['outcome']}{market} @ {a['odds']:.2f}  (still value above {floor:.2f})\n"
-                f"Fair price {a['fair']:.2f} from {a['source']}{rank}{weak}\n"
+                f"Fair price {a['fair']:.2f} from {a['source']}{rank}{trend}{weak}\n"
                 f"Paper stake: {a['stake']:.2f} {CFG['currency']}"
                 + (f"\n{note}" if note else "") + (f"\n{a['link']}" if a.get("link") else ""))
     legs = "\n".join(f"  {l['outcome']} @ {l['odds']:.2f} at {book_name(l['book'])}: {l['share'] * 100:.1f}% of the stake"
@@ -179,6 +181,7 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
             row, values, arbs = E.analyse(ev, CFG, now, paper["bankroll"])
             rows.append(row)
             alerts += values + arbs
+        E.add_trend(alerts, rows, (board.get(league) or {}).get("rows", []))
         board[league] = {"scanned": E.iso(now), "rows": rows, "alerts": alerts}
         last_scan[league] = E.iso(now)
         fresh_alerts += alerts
