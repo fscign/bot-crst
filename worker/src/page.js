@@ -131,7 +131,7 @@ function paperView(){const M=S.paper,accts=M&&M.accounts?Object.keys(M.accounts)
   +'<button class="plain" id="reset" style="margin-top:8px">Reset the test</button></section>';
  return h;}
 function contextCard(C){if(!C)return '';
- const show=['btc_above_ema100','btc_above_ema200','spx_above_200d','vix_below_20','dollar_weakening','yields_falling','stables_growing','funding_hot'],v=C.values||{},f=C.flags||{};
+ const show=['btc_30d_up','btc_above_ema100','btc_above_ema200','spx_above_200d','vix_below_20','dollar_weakening','yields_falling','stables_growing','funding_hot'],v=C.values||{},f=C.flags||{};
  const nums=[['Fear & Greed',v.fear_greed,0,''],['VIX',v.vix,1,''],['Stablecoin supply, 30 days',v.stables_30d_pct,1,'%'],['BTC funding, 7-day avg',v.funding_7d_pct,3,'%']].filter(x=>x[1]!=null);
  let h='<section class="card"><h2>Market context <small style="color:var(--mute);font-weight:400">as of '+esc(C.day)+' close</small></h2><div class="chips">'
   +nums.map(x=>'<span class="chip">'+x[0]+'<b>'+Number(x[1]).toFixed(x[2])+x[3]+'</b></span>').join('')

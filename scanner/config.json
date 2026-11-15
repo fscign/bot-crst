@@ -120,7 +120,9 @@
             "side": "long",
             "trigger": "vol_breakout",
             "max_volume_rank": 80,
-            "requires": [],
+            "requires": [
+              "btc_30d_up"
+            ],
             "exit": "trail",
             "stop_atr": 3.0,
             "trail_atr": 5.0,
@@ -132,5 +134,5 @@
       }
     }
   },
-  "context_note": ""
+  "context_note": "Tested on 7 years of crypto trades: only one of these conditions made a consistent difference. Breakout trades opened while Bitcoin was lower than 30 days earlier lost money in every period, so the experimental crypto account waits. Fear & Greed, the S&P 500, the dollar, yields and stablecoin supply did not help reliably. They are shown for information."
 }

@@ -35,6 +35,7 @@ VERSION = 2
 CONTEXT_LABELS = {
     "btc_above_ema100": "Bitcoin is above its 100-day average",
     "btc_above_ema200": "Bitcoin is above its 200-day average",
+    "btc_30d_up": "Bitcoin is higher than 30 days ago",
 }
 
 DEFAULTS = {

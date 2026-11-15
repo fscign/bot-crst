@@ -71,6 +71,30 @@ Findings:
 Conclusion: no simple chart-based rule was found that reliably makes money in crypto. The honest best case is
 daily trend following, which made money in the 2019 to 2022 bull markets and has roughly broken even since.
 
+## Crypto, round 3: does market context help? (15 Nov 2026)
+
+`research/context_research.py`, files `context_trades.csv` and `context_btc.csv`. The daily crypto rules from round 2
+(bias-free coin universe, about 7 years) were split by what the world looked like the day before each trade:
+17 yes/no conditions covering Bitcoin's own trend, Fear & Greed, the S&P 500, VIX, the dollar index, the US 10-year
+yield and stablecoin supply. Futures funding could not be tested (Binance blocks that data from GitHub's servers).
+Conditions were chosen on the first two periods and judged on the third.
+
+1. **Most context did not help.** Fear & Greed, the S&P 500 trend, the dollar, yields and stablecoin growth each
+   improved results in one period and hurt in another.
+2. **One condition was consistent: Bitcoin's own 30-day direction.** Volatility-breakout trades opened while Bitcoin
+   was higher than 30 days earlier averaged +0.69R, +0.22R and +0.11R in the three periods. Opened while it was
+   lower, they averaged -0.03R, -0.04R and -0.22R. Same pattern for the other breakout rules.
+3. **High VIX** (above 20) also went with better trades in all three periods, but on only 84 trades in the last
+   one, so it is not used.
+4. **As a Bitcoin on/off switch, nothing beat holding in all three periods.** The best switches (Bitcoin higher than
+   30 days ago, or above its 100-day average) lost far less in bad years (worst drop 47% and 39% against 77%) and
+   returned more over the whole 7.5 years, but gave up part of the 2023 to 2024 rally.
+
+With 34 condition states tested, one consistent result can also be luck. The effect is modest: even with the
+filter, the latest period is only slightly positive.
+
+**Applied:** the experimental crypto account only opens trades while Bitcoin is higher than 30 days ago.
+
 ## What the bot does with this
 - The paper test trades only the three rules above, risking 0.75%, 0.5% and 0.25% of the account per trade
   (more where the evidence is stronger), without leverage, total exposure capped at 1.5x the account.

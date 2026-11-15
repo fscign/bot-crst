@@ -182,7 +182,8 @@ def snapshot() -> dict:
     df = sb.fetch_crypto("BTCUSDT", "1d", limit=600)
     btc = df["close"].copy()
     btc.index = btc.index.normalize()
-    flags, values, failed = build(btc, period="2y", fng_limit=400)
+    # funding is skipped live: Binance futures data is not reachable from GitHub's servers
+    flags, values, failed = build(btc, period="2y", fng_limit=400, funding=False)
     last_f, last_v = flags.iloc[-1], values.iloc[-1]
     out = {"day": btc.index[-1].strftime("%Y-%m-%d"),
            "flags": {k: (None if pd.isna(x) else bool(x)) for k, x in last_f.items()},
