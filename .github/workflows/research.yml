@@ -1,5 +1,9 @@
 name: Research backtest
 on:
+  # Re-run on the 1st of every month, so the verdicts shown on the dashboard (and the automatic
+  # pausing of rules that stopped working) follow fresh data.
+  schedule:
+    - cron: "17 3 1 * *"
   push:
     branches: [main]
     paths: ["research/backtest.py", "research/crypto.py"]
