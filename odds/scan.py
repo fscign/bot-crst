@@ -4,7 +4,8 @@ Runs in GitHub Actions (see .github/workflows/odds-scan.yml).
 
 Environment:
     ODDS_API_KEY   key from the-odds-api.com (required)
-    ODDS_DOMAIN    e.g. odds.example.com   (optional: without it the state is kept in odds/state.json)
+    ODDS_DOMAIN    your own address, e.g. odds.example.com (optional: without it the free workers.dev
+                   address is looked up with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID)
     INGEST_TOKEN   shared secret with the dashboard
     TG_TOKEN, TG_CHAT   Telegram alerts (optional)
 
@@ -45,8 +46,17 @@ class Api:
 
 
 def dash_url():
+    """Your own domain if ODDS_DOMAIN is one, otherwise the free workers.dev address, asked from Cloudflare."""
     domain = os.environ.get("ODDS_DOMAIN", "").strip().removeprefix("https://").rstrip("/")
-    return f"https://{domain}" if domain else ""
+    if domain and not domain.endswith(".workers.dev"):
+        return f"https://{domain}"
+    token, account = os.environ.get("CLOUDFLARE_API_TOKEN"), os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+    if not token or not account:
+        return f"https://{domain}" if domain else ""
+    r = requests.get(f"https://api.cloudflare.com/client/v4/accounts/{account}/workers/subdomain",
+                     headers={"authorization": f"Bearer {token}"}, timeout=20)
+    r.raise_for_status()
+    return f"https://bot-odds.{r.json()['result']['subdomain']}.workers.dev"
 
 
 def load_state():

@@ -25,8 +25,9 @@ It reuses the Cloudflare, Telegram, `DASH_PASSWORD` and `INGEST_TOKEN` settings 
 1. Get a free key at https://the-odds-api.com (500 credits a month, no card needed).
 2. In this repo: Settings, Secrets and variables, Actions.
    - **Secrets** tab: add `ODDS_API_KEY` with the key.
-   - **Variables** tab: add `ODDS_DOMAIN` with the address for this dashboard, for example `odds.yourdomain.com`
-     (no https://). It must be a different address from the trading dashboard.
+   - Optional, **Variables** tab: `ODDS_DOMAIN` with your own address for this dashboard, for example
+     `odds.yourdomain.com` (no https://, different from the trading dashboard). Without it the dashboard uses the free
+     Cloudflare address `bot-odds.<your-name>.workers.dev`, which the scanner finds by itself.
 3. Actions tab: run **Deploy odds dashboard**, wait for the green tick.
 4. Run **Odds scan**. Open `https://<your ODDS_DOMAIN>` and sign in with the same password as the trading dashboard.
 
