@@ -24,8 +24,51 @@ async function loggedIn(request, env) {
 const bearerOk = (request, env) =>
   !!env.INGEST_TOKEN && request.headers.get("authorization") === "Bearer " + env.INGEST_TOKEN;
 
-const stateResponse = async (env) =>
-  new Response((await env.KV.get("state")) || "null", { headers: { "content-type": "application/json", "cache-control": "no-store" } });
+// The scanner gets the state plus any results entered by hand, so a scan running at the same moment
+// as a click cannot lose them (it re-applies them on its next run).
+const stateResponse = async (env) => {
+  const state = JSON.parse((await env.KV.get("state")) || "null");
+  if (state) state.manual = JSON.parse((await env.KV.get("manual")) || "{}");
+  return json(state);
+};
+
+// Same rules as apply_manual and paper_summary in odds/engine.py.
+function applyManual(paper, manual) {
+  for (const b of paper.settled) {
+    const res = manual[b.key];
+    if (b.result !== "unscored" || !["win", "lose", "void"].includes(res)) continue;
+    b.result = res;
+    b.pnl = res === "win" ? Math.round(b.stake * (b.odds - 1) * 100) / 100 : res === "lose" ? -b.stake : 0;
+    b.manual = true;
+    paper.bankroll = Math.round((paper.bankroll + b.pnl) * 100) / 100;
+    b.balance = paper.bankroll;
+  }
+}
+function summary(paper) {
+  const graded = paper.settled.filter((b) => !["void", "unscored"].includes(b.result));
+  const every = [...paper.settled, ...paper.open], r4 = (x) => Math.round(x * 10000) / 10000, r2 = (x) => Math.round(x * 100) / 100;
+  const staked = graded.reduce((t, b) => t + b.stake, 0), pnl = graded.reduce((t, b) => t + b.pnl, 0);
+  return {
+    bets: every.length, open: paper.open.length, won: graded.filter((b) => b.result === "win").length,
+    lost: graded.filter((b) => b.result === "lose").length, staked: r2(staked), pnl: r2(pnl), roi: staked ? r4(pnl / staked) : null,
+    expected: r2(graded.reduce((t, b) => t + b.stake * b.edge, 0)),
+    avg_clv: every.length ? r4(every.reduce((t, b) => t + b.clv, 0) / every.length) : null,
+    beat_close: every.length ? r4(every.filter((b) => b.clv > 0).length / every.length) : null,
+  };
+}
+async function setResult(env, key, result) {
+  if (!key || !["win", "lose", "void"].includes(result)) return json({ error: "bad request" }, 400);
+  const manual = JSON.parse((await env.KV.get("manual")) || "{}");
+  manual[key] = result;
+  await env.KV.put("manual", JSON.stringify(manual));
+  const state = JSON.parse((await env.KV.get("state")) || "null");
+  if (state && state.paper) {
+    applyManual(state.paper, manual);
+    state.summary = summary(state.paper);
+    await env.KV.put("state", JSON.stringify(state));
+  }
+  return json({ ok: true });
+}
 
 // Every hour Cloudflare's timer starts the "Odds scan" workflow on GitHub (GitHub's own schedule
 // skips most runs on free accounts). Needs GH_DISPATCH_TOKEN: a GitHub token allowed to run Actions.
@@ -83,6 +126,10 @@ export default {
       }
       if (path === "/") return html(PAGE);
       if (path === "/api/state") return stateWithScheduler(env);
+      if (path === "/api/paper-result" && request.method === "POST") {
+        const body = await request.json();
+        return setResult(env, body.key, body.result);
+      }
       if (path === "/api/start-scan" && request.method === "POST") return json(await startScan(env));
       return new Response("Not found", { status: 404 });
     } catch (e) {

@@ -32,6 +32,8 @@ td.hit{background:var(--hi);color:var(--good);font-weight:700}
 .box{font-size:12.5px;margin-top:10px;padding:7px 9px;background:var(--bg);border-radius:8px;color:var(--mute)}
 .legs{margin:0 0 8px;padding:0;list-style:none;font-size:14px}.legs li{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
 .go-link{font-size:12.5px;font-weight:600;color:var(--accent);margin-left:6px}
+button.res{padding:2px 8px;margin-top:3px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit;font-size:12px;cursor:pointer}
+button.res:hover{border-color:var(--accent)}
 .calc{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--mute)}
 input{width:90px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit;font-size:13px}
 button.go{padding:7px 12px;border:0;border-radius:6px;font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--accent);cursor:pointer}
@@ -133,7 +135,7 @@ function app() {
       + tile("Bets (open)", (s.bets || 0) + " (" + (s.open || 0) + ")") + tile("Won / lost", (s.won || 0) + " / " + (s.lost || 0))
       + tile("Return on stakes", pct(s.roi), cls(s.roi)) + tile("Average closing line value", pct(s.avg_clv, 2), cls(s.avg_clv))
       + tile("Beat the closing line", s.beat_close == null ? "n/a" : Math.round(s.beat_close * 100) + "%") + "</div>";
-    h += '<p class="note" style="margin:0 0 16px">The test places every value alert at the alerted price, since ' + when(P.started) + ". Judge it first by the closing line value: if the average stays above zero over 100+ bets, the alerts are finding real value. Win and loss need a few hundred bets before they mean anything. Expected profit on the settled bets so far: " + money(s.expected || 0) + cur + ".</p>";
+    h += '<p class="note" style="margin:0 0 16px">The test places every value alert at the alerted price (Liiga results are not in the data feed, so enter those by hand in Settled bets), since ' + when(P.started) + ". Judge it first by the closing line value: if the average stays above zero over 100+ bets, the alerts are finding real value. Win and loss need a few hundred bets before they mean anything. Expected profit on the settled bets so far: " + money(s.expected || 0) + cur + ".</p>";
     h += breakdown(P);
     const head = '<tr><th>Game</th><th>Bet</th><th>Bookmaker</th><th class="num">Odds</th><th class="num">Edge</th><th class="num">Stake</th><th class="num">Closing line value</th>';
     const cells = (b) => "<td>" + esc(b.home) + " v " + esc(b.away) + '<br><small class="mute">' + esc(b.league) + ", " + when(b.start) + "</small></td><td>" + esc(b.outcome) + market(b.market) + "</td><td>" + book(b.book)
@@ -141,7 +143,7 @@ function app() {
     h += '<div class="card"><h2>Open bets</h2>' + (P.open.length ? '<div class="scroll"><table>' + head + "</tr>" + P.open.map((b) => "<tr>" + cells(b) + "</tr>").join("") + "</table></div>" : '<div class="empty">None.</div>') + "</div>";
     const done = [...P.settled].reverse();
     h += '<div class="card"><h2>Settled bets</h2>' + (done.length ? '<div class="scroll"><table>' + head + '<th>Result</th><th class="num">Profit</th><th class="num">Bankroll</th></tr>'
-      + done.map((b) => "<tr>" + cells(b) + "<td>" + (b.result === "unscored" ? '<span class="mute">no result feed</span>' : esc(b.result)) + '</td><td class="num ' + cls(b.pnl) + '">' + (b.pnl >= 0 ? "+" : "") + money(b.pnl) + '</td><td class="num">' + money(b.balance) + "</td></tr>").join("") + "</table></div>" : '<div class="empty">None yet.</div>') + "</div>";
+      + done.map((b) => "<tr>" + cells(b) + "<td>" + (b.result === "unscored" ? '<span class="mute">enter result:</span><br>' + ["win", "lose", "void"].map((r) => '<button class="res" data-key="' + esc(b.key) + '" data-res="' + r + '">' + ({ win: "Won", lose: "Lost", void: "Void" })[r] + "</button>").join(" ") : esc(b.result) + (b.manual ? ' <span class="mute">(entered)</span>' : "")) + '</td><td class="num ' + cls(b.pnl) + '">' + (b.pnl >= 0 ? "+" : "") + money(b.pnl) + '</td><td class="num">' + money(b.balance) + "</td></tr>").join("") + "</table></div>" : '<div class="empty">None yet.</div>') + "</div>";
     return h;
   }
 
@@ -204,7 +206,16 @@ function app() {
       render();
     } catch (e) { $("#status").textContent = "Could not load the data: " + e.message; }
   }
-  document.addEventListener("click", (e) => {
+  document.addEventListener("click", async (e) => {
+    const r = e.target.closest("button.res");
+    if (r) {
+      const label = r.textContent, game = r.closest("tr").querySelector("td").textContent;
+      if (!confirm("Mark this bet as " + label + "?\n" + game)) return;
+      document.querySelectorAll("button.res").forEach((x) => (x.disabled = true));
+      await fetch("/api/paper-result", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: r.dataset.key, result: r.dataset.res }) });
+      await load();
+      return;
+    }
     const b = e.target.closest(".seg button");
     if (b) { view = b.dataset.v; history.replaceState(null, "", view === "alerts" ? location.pathname : "#" + view); render(); }
   });

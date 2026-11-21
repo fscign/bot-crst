@@ -199,6 +199,13 @@ def test_no_scores_league():
     assert done[0]["result"] == "unscored" and paper["bankroll"] == 1000 and paper["open"] == []
     s = E.paper_summary(paper)
     assert s["staked"] == 0 and s["roi"] is None and s["avg_clv"] is not None, "kept for closing line value only"
+    key = done[0]["key"]
+    assert E.apply_manual(paper, {"other": "win"}) == []
+    stake = done[0]["stake"]
+    E.apply_manual(paper, {key: "win"})
+    assert done[0]["result"] == "win" and close(paper["bankroll"], 1000 + round(stake * 1.2, 2))
+    assert E.apply_manual(paper, {key: "lose"}) == [], "a result is applied once only"
+    assert E.paper_summary(paper)["won"] == 1
 
 
 def test_budget():

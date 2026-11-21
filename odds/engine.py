@@ -369,6 +369,22 @@ def paper_settle(paper, scores, now, no_scores=()):
     return done
 
 
+def apply_manual(paper, manual):
+    """Results entered by hand on the dashboard for bets the feed could not settle ("unscored")."""
+    done = []
+    for b in paper["settled"]:
+        res = manual.get(b["key"])
+        if b.get("result") != "unscored" or res not in ("win", "lose", "void"):
+            continue
+        b["result"] = res
+        b["pnl"] = round(b["stake"] * (b["odds"] - 1), 2) if res == "win" else -b["stake"] if res == "lose" else 0.0
+        b["manual"] = True
+        paper["bankroll"] = round(paper["bankroll"] + b["pnl"], 2)
+        b["balance"] = paper["bankroll"]
+        done.append(b)
+    return done
+
+
 def paper_summary(paper):
     s = paper["settled"]
     graded = [b for b in s if b["result"] not in ("void", "unscored")]

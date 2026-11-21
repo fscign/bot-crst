@@ -142,6 +142,7 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
         print(f"a scan ran at {state['updated']}, less than {recent} minutes ago: nothing to do")
         return state
     paper = state.get("paper") or E.new_paper(CFG, now)
+    E.apply_manual(paper, state.get("manual") or {})
     board = state.get("board") or {}
     last_scan = state.get("last_scan") or {}
     seen = state.get("seen") or {}
