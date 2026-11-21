@@ -141,7 +141,7 @@ function app() {
     h += '<div class="card"><h2>Open bets</h2>' + (P.open.length ? '<div class="scroll"><table>' + head + "</tr>" + P.open.map((b) => "<tr>" + cells(b) + "</tr>").join("") + "</table></div>" : '<div class="empty">None.</div>') + "</div>";
     const done = [...P.settled].reverse();
     h += '<div class="card"><h2>Settled bets</h2>' + (done.length ? '<div class="scroll"><table>' + head + '<th>Result</th><th class="num">Profit</th><th class="num">Bankroll</th></tr>'
-      + done.map((b) => "<tr>" + cells(b) + "<td>" + esc(b.result) + '</td><td class="num ' + cls(b.pnl) + '">' + (b.pnl >= 0 ? "+" : "") + money(b.pnl) + '</td><td class="num">' + money(b.balance) + "</td></tr>").join("") + "</table></div>" : '<div class="empty">None yet.</div>') + "</div>";
+      + done.map((b) => "<tr>" + cells(b) + "<td>" + (b.result === "unscored" ? '<span class="mute">no result feed</span>' : esc(b.result)) + '</td><td class="num ' + cls(b.pnl) + '">' + (b.pnl >= 0 ? "+" : "") + money(b.pnl) + '</td><td class="num">' + money(b.balance) + "</td></tr>").join("") + "</table></div>" : '<div class="empty">None yet.</div>') + "</div>";
     return h;
   }
 
@@ -159,7 +159,7 @@ function app() {
       const m = new Map();
       for (const b of all) { const k = key(b); if (!m.has(k)) m.set(k, []); m.get(k).push(b); }
       [...m.entries()].sort((x, y) => y[1].length - x[1].length).forEach(([k, bs], i) => {
-        const done = bs.filter((b) => b.result && b.result !== "void"), staked = done.reduce((t, b) => t + b.stake, 0), pnl = done.reduce((t, b) => t + b.pnl, 0);
+        const done = bs.filter((b) => b.result && b.result !== "void" && b.result !== "unscored"), staked = done.reduce((t, b) => t + b.stake, 0), pnl = done.reduce((t, b) => t + b.pnl, 0);
         const clv = bs.reduce((t, b) => t + b.clv, 0) / bs.length, beat = bs.filter((b) => b.clv > 0).length / bs.length;
         h += "<tr" + (i === 0 ? ' class="first"' : "") + "><td>" + (i === 0 ? "<b>" + title + "</b>" : "") + "</td><td>" + esc(k) + '</td><td class="num">' + bs.length
           + '</td><td class="num ' + cls(clv) + '">' + pct(clv, 2) + '</td><td class="num">' + Math.round(beat * 100) + '%</td><td class="num">' + done.length

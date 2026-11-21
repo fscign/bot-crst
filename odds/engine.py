@@ -336,10 +336,19 @@ def result_of(bet, score):
     return None
 
 
-def paper_settle(paper, scores, now):
+def paper_settle(paper, scores, now, no_scores=()):
+    """Settle finished bets. Leagues the feed has no results for (no_scores) are closed 6 hours after
+    the start as "unscored": no profit or loss, but their closing line value still counts."""
     by_id = {s["id"]: s for s in scores if s.get("completed")}
     done, still = [], []
     for b in paper["open"]:
+        if b["sport"] in no_scores:
+            if now - parse_time(b["start"]) > timedelta(hours=6):
+                b.update(result="unscored", pnl=0.0, settled=iso(now), balance=paper["bankroll"])
+                done.append(b)
+            else:
+                still.append(b)
+            continue
         s = by_id.get(b["event"])
         res = result_of(b, s) if s else None
         if res is None:
@@ -362,7 +371,7 @@ def paper_settle(paper, scores, now):
 
 def paper_summary(paper):
     s = paper["settled"]
-    graded = [b for b in s if b["result"] != "void"]
+    graded = [b for b in s if b["result"] not in ("void", "unscored")]
     staked = sum(b["stake"] for b in graded)
     every = s + paper["open"]
     return {

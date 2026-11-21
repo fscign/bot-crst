@@ -189,6 +189,18 @@ def test_market_shape_and_trend():
     assert values[0]["trend"] is None
 
 
+def test_no_scores_league():
+    paper = E.new_paper(CFG, NOW)
+    ev = event(book("pinnacle", PIN), book("coolbet", {"Arsenal": 2.20, "Draw": 3.3, "Chelsea": 3.5}))
+    ev["sport_key"] = "icehockey_liiga"
+    E.paper_place(paper, E.analyse(ev, CFG, NOW, 1000)[1])
+    assert E.paper_settle(paper, [], NOW + timedelta(hours=8), CFG["no_scores"]) == [], "not before the game ends"
+    done = E.paper_settle(paper, [], NOW + timedelta(hours=12), CFG["no_scores"])
+    assert done[0]["result"] == "unscored" and paper["bankroll"] == 1000 and paper["open"] == []
+    s = E.paper_summary(paper)
+    assert s["staked"] == 0 and s["roi"] is None and s["avg_clv"] is not None, "kept for closing line value only"
+
+
 def test_budget():
     first = datetime(2026, 11, 1, 0, 0, tzinfo=E.UTC)
     assert close(E.days_to_reset(first, 1), 30) and close(E.days_to_reset(NOW, 1), 16.5)

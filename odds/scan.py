@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -36,7 +37,13 @@ class Api:
         self.key, self.remaining, self.spent = key, None, 0
 
     def get(self, path, **params):
-        r = requests.get(f"{API}{path}", params={"apiKey": self.key, **params}, timeout=30)
+        # the API allows only a few requests per second: pace them, and wait and retry on 429
+        for attempt in range(4):
+            time.sleep(0.4)
+            r = requests.get(f"{API}{path}", params={"apiKey": self.key, **params}, timeout=30)
+            if r.status_code != 429:
+                break
+            time.sleep(2 * (attempt + 1))
         if "x-requests-remaining" in r.headers:
             self.remaining = int(float(r.headers["x-requests-remaining"]))
             self.spent += int(float(r.headers.get("x-requests-last", 0) or 0))
@@ -155,7 +162,8 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
     settled = []
     if CFG["settle_results"]:
         today = E.iso(now)[:10]
-        due = {b["sport"] for b in paper["open"] if now - E.parse_time(b["start"]) > timedelta(hours=4)}
+        no_scores = set(CFG.get("no_scores", []))
+        due = {b["sport"] for b in paper["open"] if now - E.parse_time(b["start"]) > timedelta(hours=4)} - no_scores
         checked = state.get("settle_checked") or {}
         for league in sorted(due):
             if checked.get(league) == today or remaining < 2:
@@ -164,8 +172,7 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
             checked[league] = today
             remaining = api.remaining if api and api.remaining is not None else remaining - 2
         state["settle_checked"] = checked
-        if due:
-            settled += E.paper_settle(paper, [], now)      # voids games that never got a result
+        settled += E.paper_settle(paper, [], now, no_scores)  # closes no-results leagues, voids games that never got a result
 
     # 3. fetch odds for as many leagues as the monthly credits allow
     cost = len(CFG["markets"]) * len(CFG["regions"].split(","))
@@ -208,7 +215,9 @@ def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hin
         more = f"\n\n(+{len(new) - 8} more on the dashboard)" if len(new) > 8 else ""
         telegram("\n\n".join(describe(a, now) for a in best) + more
                  + "\n\nPrices move fast: check the price is still there before betting.")
-    if settled:
+    graded = [b for b in settled if b["result"] != "unscored"]
+    if graded:
+        settled = graded
         lines = [f"{b['home']} v {b['away']}: {b['outcome']} @ {b['odds']:.2f} {b['result'].upper()} "
                  f"{b['pnl']:+.2f}" for b in settled[-8:]]
         telegram("Paper bets settled\n" + "\n".join(lines) + f"\nPaper bankroll: {paper['bankroll']:.2f} {CFG['currency']}")

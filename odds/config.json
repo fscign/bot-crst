@@ -46,6 +46,7 @@
   "refresh_hours": 12,
   "burst": 3,
   "settle_results": true,
+  "no_scores": ["icehockey_liiga"],
   "min_edge": 0.03,
   "min_edge_consensus": 0.06,
   "max_edge": 0.15,
