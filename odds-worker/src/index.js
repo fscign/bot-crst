@@ -27,7 +27,35 @@ const bearerOk = (request, env) =>
 const stateResponse = async (env) =>
   new Response((await env.KV.get("state")) || "null", { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 
+// Every hour Cloudflare's timer starts the "Odds scan" workflow on GitHub (GitHub's own schedule
+// skips most runs on free accounts). Needs GH_DISPATCH_TOKEN: a GitHub token allowed to run Actions.
+async function startScan(env) {
+  const result = { at: new Date().toISOString() };
+  if (!env.GH_DISPATCH_TOKEN) result.error = "GH_DISPATCH_TOKEN is not set";
+  else {
+    const r = await fetch(`https://api.github.com/repos/${env.GH_REPO || "fscign/bot-crst"}/actions/workflows/odds-scan.yml/dispatches`, {
+      method: "POST",
+      headers: { authorization: "Bearer " + env.GH_DISPATCH_TOKEN, accept: "application/vnd.github+json",
+                 "user-agent": "bot-odds-worker", "content-type": "application/json" },
+      body: JSON.stringify({ ref: "main" }),
+    });
+    if (r.status !== 204) result.error = "GitHub answered " + r.status + ": " + (await r.text()).slice(0, 200);
+  }
+  await env.KV.put("dispatch", JSON.stringify(result));
+  return result;
+}
+
+const stateWithScheduler = async (env) => {
+  const state = JSON.parse((await env.KV.get("state")) || "null");
+  if (state) state.scheduler = JSON.parse((await env.KV.get("dispatch")) || "null");
+  return json(state);
+};
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(startScan(env));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -54,7 +82,8 @@ export default {
         return html(LOGIN.replace("<!--msg-->", env.DASH_PASSWORD ? "" : '<p class="err">DASH_PASSWORD is not set on the Worker yet.</p>'));
       }
       if (path === "/") return html(PAGE);
-      if (path === "/api/state") return stateResponse(env);
+      if (path === "/api/state") return stateWithScheduler(env);
+      if (path === "/api/start-scan" && request.method === "POST") return json(await startScan(env));
       return new Response("Not found", { status: 404 });
     } catch (e) {
       return json({ error: e.message }, 500);

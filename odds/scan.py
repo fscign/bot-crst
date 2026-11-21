@@ -137,6 +137,10 @@ def describe(a, now):
 
 def run(now, fetch_sports, fetch_events, fetch_odds, fetch_scores, remaining_hint=None, api=None):
     state = load_state()
+    recent = os.environ.get("SKIP_IF_RECENT")
+    if recent and state.get("updated") and now - E.parse_time(state["updated"]) < timedelta(minutes=int(recent)):
+        print(f"a scan ran at {state['updated']}, less than {recent} minutes ago: nothing to do")
+        return state
     paper = state.get("paper") or E.new_paper(CFG, now)
     board = state.get("board") or {}
     last_scan = state.get("last_scan") or {}

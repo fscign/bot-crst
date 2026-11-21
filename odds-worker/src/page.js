@@ -190,7 +190,9 @@ function app() {
   function render() {
     if (!S) { $("#app").innerHTML = '<div class="card empty">No scan has arrived yet. Run the <b>Odds scan</b> workflow on GitHub.</div>'; $("#status").textContent = ""; return; }
     const q = S.quota || {};
-    $("#status").textContent = "Last scan " + ago(S.updated) + " (" + when(S.updated) + "). Data credits left this month: " + (q.remaining ?? "?") + " of " + (q.monthly ?? "?") + ".";
+    const sch = S.scheduler;
+    $("#status").innerHTML = esc("Last scan " + ago(S.updated) + " (" + when(S.updated) + "). Data credits left this month: " + (q.remaining ?? "?") + " of " + (q.monthly ?? "?") + ".")
+      + (sch && sch.error ? ' <span class="err">Hourly timer problem: ' + esc(sch.error) + "</span>" : "");
     document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.v === view));
     $("#app").innerHTML = ({ alerts: alertsView, games: gamesView, paper: paperView, help: helpView })[view]();
   }

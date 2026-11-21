@@ -1,6 +1,8 @@
 name: Odds scan
 on:
-  # Every hour. The scanner itself decides how many credits each run may spend (see plan_scan in odds/engine.py),
+  # Normally started every hour by the dashboard's Cloudflare timer. This GitHub schedule is only a
+  # fallback (GitHub skips many scheduled runs): it does nothing if a scan ran in the last 40 minutes.
+  # The scanner itself decides how many credits each run may spend (see plan_scan in odds/engine.py),
   # so quiet hours cost nothing and the hours before kick-off get more.
   schedule:
     - cron: "17 * * * *"
@@ -23,6 +25,7 @@ jobs:
         run: python odds/scan.py
         env:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SKIP_IF_RECENT: ${{ github.event_name == 'schedule' && '40' || '' }}
           ODDS_DOMAIN: ${{ secrets.ODDS_DOMAIN || vars.ODDS_DOMAIN }}
           INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

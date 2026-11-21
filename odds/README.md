@@ -40,6 +40,12 @@ It reuses the Cloudflare, Telegram, `DASH_PASSWORD` and `INGEST_TOKEN` settings 
 
 After that it scans by itself every hour.
 
+### Reliable hourly scans (GitHub token)
+GitHub skips many scheduled runs on free accounts, so the dashboard's Cloudflare timer starts the scan every hour instead.
+It needs a GitHub token with permission to run Actions on this repo, saved as the repository secret `GH_DISPATCH_TOKEN`
+(then run **Deploy odds dashboard** once). GitHub's own schedule stays as a fallback and skips itself when a scan ran in
+the last 40 minutes. If the timer fails, the dashboard's top line says why. The token expires: make a new one before then.
+
 ## The free plan and when to upgrade
 
 Each league costs 1 credit per fetch, whatever the number of bookmakers in it. The scanner runs every hour and decides

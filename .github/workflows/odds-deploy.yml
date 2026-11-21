@@ -17,6 +17,7 @@ jobs:
       ODDS_DOMAIN: ${{ secrets.ODDS_DOMAIN || vars.ODDS_DOMAIN }}
       INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
       DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
+      GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,7 +28,7 @@ jobs:
       - run: npx wrangler deploy
       - name: Set dashboard secrets
         run: |
-          for s in INGEST_TOKEN DASH_PASSWORD; do
+          for s in INGEST_TOKEN DASH_PASSWORD GH_DISPATCH_TOKEN; do
             v="${!s}"
             if [ -n "$v" ]; then printf '%s' "$v" | npx wrangler secret put "$s"; else echo "$s is not set, skipping"; fi
           done
