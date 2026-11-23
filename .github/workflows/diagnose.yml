@@ -1,0 +1,24 @@
+name: Diagnose paper test
+on:
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Print the paper test trades
+        env:
+          DASH_DOMAIN: ${{ secrets.DASH_DOMAIN || vars.DASH_DOMAIN }}
+          INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+        run: |
+          curl -sf -H "Authorization: Bearer $INGEST_TOKEN" "https://$DASH_DOMAIN/api/paper" > paper.json
+          python3 - <<'PY'
+          import json
+          P = json.load(open("paper.json"))
+          for name, A in [("main", P)] + list((P.get("accounts") or {}).items()):
+              print(f"=== {name}: {A.get('title')} started {A.get('started')} balance {A.get('balance')} stats {A.get('stats')}")
+              for t in A.get("closed", []):
+                  print("C", t["symbol"], t["tf"], t["side"], t.get("rule"), t["opened"], t["closed"], t["entry"], t["exit"], t["reason"], t["pnl"], t.get("r"), t.get("margin"))
+              for t in A.get("open", []):
+                  print("O", t["symbol"], t["tf"], t["side"], t.get("rule"), t["opened"], t["entry"], t.get("last"), round(t["stop"], 4), t.get("stop0"), t.get("atr"), t.get("exit_setup"), t.get("trail_atr"))
+          PY
