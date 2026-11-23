@@ -39,6 +39,16 @@ def run_stock(df, market, gate, rng, sink):
     never = pd.Series(False, index=d.index)
     fams = [f for f in cr.families(d, rng, "1d") if f[1] == 1]
     fams.append(("score40_live", 1, cross, score <= -30, [("trail3_40bars", 2.0, 3.0, 0.0, 40)]))
+    # 200-day trend variants: simple average (same value whatever history is loaded), and versions that need
+    # 2 closes in a row on the other side before acting (fewer whipsaws)
+    c = d["close"]
+    sma = c.rolling(200).mean()
+    above, below = c > sma, c < sma
+    big = [("signal", 3.0, 0.0, 0.0, 100000)]
+    fams.append(("sma200_trend", 1, above & ~above.shift(1, fill_value=False), below, big))
+    fams.append(("sma200_confirm2", 1, above & above.shift(1, fill_value=False) & ~above.shift(2, fill_value=False),
+                 below & below.shift(1, fill_value=False), big))
+    fams.append(("sma200_buffer1pct", 1, (c > sma * 1.01) & ~(c.shift(1) > sma.shift(1) * 1.01), c < sma * 0.99, big))
     fams.append(("score40", 1, cross, never, [("trail3_40bars", 2.0, 3.0, 0.0, 40), ("trail3_120bars", 2.0, 3.0, 0.0, 120),
                                               ("wide5_120bars", 3.0, 5.0, 0.0, 120), ("wide5_250bars", 3.0, 5.0, 0.0, 250),
                                               ("wide8_250bars", 4.0, 8.0, 0.0, 250)]))

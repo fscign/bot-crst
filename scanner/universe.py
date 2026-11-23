@@ -25,7 +25,8 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "data" / "universe.json"
 FILES = {"https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt": ("Symbol", "Security Name"),
          "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt": ("ACT Symbol", "Security Name")}
-SKIP = re.compile(r"warrant|right|unit|preferred|depositary sh|notes due|debenture|%", re.I)
+SKIP = re.compile(r"warrant|right|unit|preferred|depositary sh|notes due|debenture|%|\\bETN\\b|exchange traded|"
+                  r"ipath|proshares|direxion|leveraged|inverse|ultra|vix|volatility|2x|3x|bull|bear", re.I)
 
 
 def listed() -> dict[str, str]:
