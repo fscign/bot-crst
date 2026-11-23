@@ -107,10 +107,10 @@
     ],
     "accounts": {
       "crypto": {
-        "title": "Crypto (experiment)",
-        "intro": "Experimental account. The research found no crypto rule with a proven edge; this trades the least-bad one with small risk so it can be watched live. Expect roughly break-even.",
+        "title": "Crypto (bot rule + Telegram)",
+        "intro": "Two sources in one account. 1) The bot's own crypto rule: experimental, the research found no crypto rule with a proven edge, so it trades the least-bad one with small risk and only while Bitcoin is higher than 30 days ago. 2) Every signal from the Telegram channels below. Results by source are shown separately.",
         "start_balance": 1000,
-        "max_exposure": 1.0,
+        "max_exposure": 3.0,
         "max_position_pct": 15,
         "trail_atr": 5.0,
         "fee_pct": {
@@ -167,6 +167,8 @@
         "name": "the 📈 channel",
         "title": "Telegram: 📈"
       }
-    ]
+    ],
+    "account": "crypto",
+    "account_title": "Crypto (bot rule + Telegram)"
   }
 }

@@ -266,6 +266,85 @@ def open_trade(state: dict, sig: dict, post: dict, cfg: dict, price: float, t: d
     return tr, ("limit order at " + f"{zone_edge:g}") if pending else "opened"
 
 
+def feed_settings(main_cfg: dict) -> dict:
+    """Settings for copying Telegram signals into an existing account (all channels as one feed)."""
+    chans = main_cfg.get("telegram", {}).get("channels", [])
+    names = " and ".join(c.get("name") or f"@{c['channel']}" for c in chans) or "none"
+    cfg = settings(main_cfg, {"channel": "feed", "name": names, "title": "Telegram feed"})
+    return cfg
+
+
+def process_feed(state: dict, feed: list[tuple[str, list[dict] | None]], cfg: dict, price_now,
+                 t: datetime | None = None) -> None:
+    """Open or close trades in `state` from new posts of several channels, treated as ONE source:
+    the same coin posted in two channels opens one trade. Exits of open trades are handled by
+    paper.update_open, so call this after paper.run for the account."""
+    t = t or datetime.now(UTC)
+    last = state.setdefault("tg_last", {})
+    state.setdefault("signals", [])
+    state["tg"] = True
+    errors = []
+    for chan, posts in feed:
+        if posts is None:
+            errors.append(chan)
+            continue
+        if chan not in last:                             # first look at a channel: only note where it is now
+            last[chan] = max((p["id"] for p in posts), default=0)
+            continue
+        for post in posts:
+            if post["id"] <= last[chan]:
+                continue
+            _handle_post(state, post, chan, cfg, price_now, t)
+        last[chan] = max([last[chan]] + [p["id"] for p in posts])
+    if errors:
+        state["feed_error"] = paper.now_iso(t)
+        state["feed_error_channels"] = errors
+    else:
+        state.pop("feed_error", None)
+        state.pop("feed_error_channels", None)
+    for tr in state["open"]:
+        if tr.get("pending"):
+            tr["upnl"] = 0.0
+
+
+def _handle_post(state: dict, post: dict, chan: str, cfg: dict, price_now, t: datetime) -> None:
+    sig = parse_signal(post["text"])
+    log = {"post": post["id"], "channel": chan, "time": paper.now_iso(post["time"]), "text": post["text"][:300]}
+    if sig is None:                                      # kept so unreadable formats can be spotted and added
+        state["unread"] = (state.get("unread", []) + [log])[-15:]
+        return
+    log.update(symbol=sig["symbol"], side=sig.get("side"), action=sig["action"])
+    if t - post["time"] > timedelta(hours=cfg["max_signal_age_hours"]):
+        log["result"] = "too old when first seen"
+    elif sig["action"] == "close":
+        hits = [tr for tr in state["open"] if tr["symbol"] == sig["symbol"] and tr.get("tf") == "tg"]
+        for tr in hits:
+            state["open"].remove(tr)
+            if not tr.get("pending"):
+                paper.settle(state, tr, price_now(tr["symbol"], "crypto") or tr["last"], "channel said close", t, cfg)
+        log["result"] = f"closed {len(hits)} trade(s)" if hits else "nothing open to close"
+    elif any(tr["symbol"] == sig["symbol"] for tr in state["open"]):
+        log["result"] = "already holding this coin (or posted in both channels)"
+    else:
+        price = price_now(sig["symbol"], "crypto")
+        if not price:
+            log["result"] = "no Binance spot price for this coin"
+        else:
+            tr, msg = open_trade(state, sig, {**post, "id": post["id"]}, {**cfg, "display": chan}, price, t)
+            log["result"] = msg
+            log.update(entry=sig["entry_low"], entry_high=sig["entry_high"], stop=sig["stop"],
+                       targets=sig["targets"], leverage=sig["leverage"])
+    state["signals"] = (state["signals"] + [log])[-40:]
+
+
+def feed_rules_text(cfg: dict) -> list[str]:
+    lines = rules_text({**cfg, "display": cfg["display"]})
+    lines[0] = (f"Telegram signals: every signal posted in {cfg['display']} is copied into this account, as one feed "
+                f"(a coin posted in both channels opens one trade). Read at each scan, every 15 minutes. "
+                f"Signals posted only as pictures cannot be read.")
+    return lines
+
+
 def run_channel(state: dict | None, cfg: dict, bars_since, price_now, posts: list[dict] | None,
                 t: datetime | None = None) -> dict:
     t = t or datetime.now(UTC)

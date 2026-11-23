@@ -101,4 +101,21 @@ assert st["signals"][-1]["result"] == "too old when first seen"
 st = run(st, None, T0 + timedelta(hours=35))
 assert "feed_error" in st and st["last_post"] == 9
 
+# ---- several channels as one feed inside an existing account
+import paper
+FC = tg.feed_settings({"telegram": {"channels": [{"channel": "-1", "name": "A"}, {"channel": "-2", "name": "B"}]}})
+FC["fee_pct"] = {"crypto": 0.0, "us": 0.0, "eu": 0.0}
+acc = paper.fresh_state(FC)
+tg.process_feed(acc, [("A", [post(1, "hi")]), ("B", [post(5, "hi")])], FC, lambda s, k: 100.0, T0)
+assert acc["open"] == [] and acc["tg_last"] == {"A": 1, "B": 5}
+same = "#XYZ/USDT LONG\nEntry 100\nTP 110\nSL 95"
+tg.process_feed(acc, [("A", [post(2, same)]), ("B", [post(6, same), post(7, "#BTC is nice today")])], FC,
+                lambda s, k: 100.0, T0)
+assert len(acc["open"]) == 1 and acc["open"][0]["rule"] == "A post 2", acc["open"]
+assert acc["signals"][-1]["result"].startswith("already holding") and acc["signals"][-1]["channel"] == "B"
+assert acc["unread"][-1]["text"] == "#BTC is nice today"
+tg.process_feed(acc, [("A", None), ("B", [])], FC, lambda s, k: 100.0, T0)
+assert acc["feed_error_channels"] == ["A"] and len(acc["open"]) == 1
+assert "both channels" in tg.feed_rules_text(FC)[0] and "A and B" in tg.feed_rules_text(FC)[0]
+
 print("All Telegram signal checks passed")

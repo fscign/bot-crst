@@ -532,6 +532,8 @@ def main() -> None:
         except Exception as e:
             print(f"Market context unavailable this scan: {e}")
     flags = (ctx or {}).get("flags", {})
+    print("Crypto account gate (Bitcoin higher than 30 days ago):", flags.get("btc_30d_up"),
+          "| BTC above its 100-day average:", flags.get("btc_above_ema100"))
 
     # ---- paper trading test: the main account, then any extra accounts
     try:
@@ -548,17 +550,20 @@ def main() -> None:
                 print(f"Paper account '{name}' skipped this scan: {e}")
                 if extra_before.get(name):
                     pstate["accounts"][name] = extra_before[name]
-        # Telegram channels: one account per channel. Numeric ids are private channels read through the
-        # reader account (TG_* secrets); names are public channels read from t.me/s/<name>.
-        channels = cfg.get("telegram", {}).get("channels", [])
-        reader = None
-        if not args.demo and any(str(ch["channel"]).lstrip("-").isdigit() for ch in channels):
-            reader = tg_signals.Reader()
-            if reader.error:
-                print(f"Telegram reader: {reader.error}")
-        for ch in channels:
-            name = "tg_" + str(ch["channel"]).lstrip("-")
-            try:
+        # Telegram channels: all channels are ONE feed, copied into the account named in telegram.account.
+        # Numeric ids are private channels read through the reader account (TG_* secrets); names are public
+        # channels read from t.me/s/<name>.
+        tgc = cfg.get("telegram", {})
+        target = pstate["accounts"].get(tgc.get("account", "crypto"))
+        if tgc.get("channels") and target is not None:
+            reader = None
+            if not args.demo and any(str(ch["channel"]).lstrip("-").isdigit() for ch in tgc["channels"]):
+                reader = tg_signals.Reader()
+                if reader.error:
+                    print(f"Telegram reader: {reader.error}")
+            feed = []
+            for ch in tgc["channels"]:
+                label = ch.get("name") or f"@{ch['channel']}"
                 try:
                     if args.demo:
                         posts = []
@@ -566,19 +571,24 @@ def main() -> None:
                         posts = reader.posts(int(ch["channel"]))
                     else:
                         posts = tg_signals.fetch_posts(ch["channel"])
+                    print(f"Telegram {label}: {len(posts)} recent posts read")
                 except Exception as e:
-                    print(f"Telegram channel {ch.get('name', ch['channel'])} could not be read: {e}")
+                    print(f"Telegram channel {label} could not be read: {e}")
                     posts = None
-                pstate["accounts"][name] = tg_signals.run_channel(extra_before.get(name), tg_signals.settings(cfg, ch),
-                                                                  bars_fn, price_fn, posts)
+                feed.append((label, posts))
+            if reader is not None:
+                reader.close()
+            try:
+                fcfg = tg_signals.feed_settings(cfg)
+                n_before = len(target.get("signals", []))
+                tg_signals.process_feed(target, feed, fcfg, price_fn)
+                target["rules_text"] = target.get("rules_text", []) + tg_signals.feed_rules_text(fcfg)
+                target["title"] = tgc.get("account_title", target.get("title"))
+                print(f"Telegram feed: {len(target.get('signals', [])) - n_before} new signal(s) handled")
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                print(f"Telegram account '{name}' skipped this scan: {e}")
-                if extra_before.get(name):
-                    pstate["accounts"][name] = extra_before[name]
-        if reader is not None:
-            reader.close()
+                print(f"Telegram feed skipped this scan: {e}")
     except Exception as e:
         import traceback
         traceback.print_exc()
