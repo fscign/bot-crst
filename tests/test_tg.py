@@ -25,6 +25,14 @@ assert s["symbol"] == "ETHUSDT" and s["entry_low"] == 3250 and s["stop"] == 3180
 assert tg.parse_signal("#BTC is looking strong today, what do you think?") is None
 assert tg.parse_signal("Close #ETH/USDT now") == {"action": "close", "symbol": "ETHUSDT"}
 assert tg.parse_signal("Good morning everyone!") is None
+s = tg.parse_signal("BTC лонг\nВход: 60000-61000\nЦели: 62500, 64000\nСтоп: 58500\nПлечо 10x")
+assert s["symbol"] == "BTCUSDT" and s["side"] == "long" and s["entry_low"] == 60000 and s["targets"] == [62500, 64000] \
+    and s["stop"] == 58500 and s["leverage"] == 10, s
+s = tg.parse_signal("#SOL шорт\nТочка входа 145\nТейк 1: 140\nТейк 2: 136\nСтоп-лосс 149")
+assert s["side"] == "short" and s["symbol"] == "SOLUSDT" and s["targets"] == [140, 136] and s["stop"] == 149, s
+assert tg.parse_signal("Закрываем ETH, фиксируем прибыль")["action"] == "close"
+assert tg.parse_signal("Доброе утро! Рынок сегодня спокойный") is None
+assert tg.parse_signal("RSI shows divergence on the daily, CPI tomorrow") is None
 s = tg.parse_signal("#ADA/USDT LONG\nEntry 0.90\nSL 0.95")                # stop on the wrong side: ignored
 assert s["stop"] is None
 

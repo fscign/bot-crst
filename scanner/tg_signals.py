@@ -148,10 +148,13 @@ SYMBOL_RE = [
     r"\b([A-Z0-9]{2,15})USDT(?:\.P|PERP)?\b",
     r"#([A-Z0-9]{2,15})\b",
     r"\$([A-Z0-9]{2,15})\b",
-    r"(?i)\b(?:coin|pair|symbol)\s*[:\-]\s*([A-Za-z0-9]{2,15})",
+    r"(?i)\b(?:coin|pair|symbol|монета|пара)\s*[:\-]\s*([A-Za-z0-9]{2,15})",
+    r"\b([A-Z][A-Z0-9]{1,9})\b",                     # a bare ticker like BTC (last resort)
 ]
 NOT_COINS = {"USDT", "USD", "LONG", "SHORT", "BUY", "SELL", "SPOT", "FUTURES", "TP", "SL", "VIP", "SIGNAL", "ENTRY",
-             "TARGET", "TARGETS", "STOP", "LEVERAGE", "CROSS", "ISOLATED", "UPDATE", "PROFIT", "NEW", "FREE"}
+             "TARGET", "TARGETS", "STOP", "LEVERAGE", "CROSS", "ISOLATED", "UPDATE", "PROFIT", "NEW", "FREE", "TP1",
+             "TP2", "TP3", "TP4", "TP5", "SL1", "ROI", "PNL", "ATH", "DCA", "OK", "UTC", "MSK", "AI", "ETF", "FOMC", "CPI",
+             "USA", "US", "EU", "RSI", "MACD", "EMA", "MA", "TA", "TG", "IMO", "ALT", "ALTS", "CEO", "SEC", "FED", "X"}
 
 
 def find_symbol(text: str) -> str | None:
@@ -169,11 +172,12 @@ def parse_signal(text: str) -> dict | None:
     if not sym:
         return None
     low = text.lower()
-    if re.search(r"\b(close|closed|cancel|cancelled|canceled|exit now|close all)\b", low) and \
-            not re.search(r"\b(entry|enter|buy zone|targets?|tp ?1)\b", low):
+    if re.search(r"\b(close|closed|cancel|cancelled|canceled|exit now|close all|закрыва\w*|закрыл\w*|закрыт\w*|"
+                 r"отмен\w*|выход\w*|фиксиру\w*)", low) and \
+            not re.search(r"\b(entry|enter|buy zone|targets?|tp ?1|вход\w*|цел[ьи]\w*|тейк\w*)", low):
         return {"action": "close", "symbol": sym}
-    long_hit = re.search(r"\b(long|buy)\b", low)
-    short_hit = re.search(r"\b(short|sell)\b", low)
+    long_hit = re.search(r"\b(long|buy|лонг\w*|покупк\w*|купи\w*|покупаем)", low)
+    short_hit = re.search(r"\b(short|sell|шорт\w*|продаж\w*|прода[её]м|продать)", low)
     if bool(long_hit) == bool(short_hit):
         if not (long_hit and short_hit):
             return None
@@ -181,9 +185,11 @@ def parse_signal(text: str) -> dict | None:
     else:
         side = "long" if long_hit else "short"
     entries = _nums_after(text, r"entry(?: zone| price)?|entries|enter|buy(?: zone| at| price)?|sell(?: zone| at)?|"
-                                r"short(?: at)?|long(?: at)?|open(?: price)?|price", 2)
-    targets = _nums_after(text, r"targets?|take[ -]?profits?|\btp\s?(?:\d(?!\d))?|\bt\d(?!\d)", 6)
-    stops = _nums_after(text, r"stop[ -]?loss|stoploss|\bsl\b|stop", 1)
+                                r"short(?: at)?|long(?: at)?|open(?: price)?|price|точка входа|вход\w*|зона входа|"
+                                r"лонг\w*|шорт\w*|покупк\w*|цена", 2)
+    num = r"\s?(?:\d(?![\d.,]))?"                                    # skip a target's own number, as in "TP 1: 140"
+    targets = _nums_after(text, rf"(?:targets?|take[ -]?profits?|\btp|\bt(?=\d)|цел[ьи]\w*|тейк\w*|\bтп){num}", 6)
+    stops = _nums_after(text, r"stop[ -]?loss|stoploss|\bsl\b|stop|стоп[ -]?лосс\w*|стоп\w*|\bсл\b", 1)
     lev = re.search(r"(?i)(?:leverage|lev)[^\d\n]{0,15}(\d{1,3})\s?x|\b(\d{1,3})\s?x\b", text)
     if not entries and not stops:
         return None
