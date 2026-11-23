@@ -571,7 +571,9 @@ def main() -> None:
                         posts = reader.posts(int(ch["channel"]))
                     else:
                         posts = tg_signals.fetch_posts(ch["channel"])
-                    print(f"Telegram {label}: {len(posts)} recent posts read")
+                    kinds = [(tg_signals.parse_signal(x["text"]) or {}).get("action") for x in posts]
+                    print(f"Telegram {label}: {len(posts)} recent posts read, {kinds.count('open')} look like "
+                          f"trade signals, {kinds.count('close')} like close instructions")
                 except Exception as e:
                     print(f"Telegram channel {label} could not be read: {e}")
                     posts = None
