@@ -172,4 +172,26 @@ c = s["closed"][-1]
 assert c["reason"] == "closed below its 200-day average" and c["exit"] == 110 and c["pnl"] == 20.0, c
 assert "200-day average" in s["rules_text"][1]
 
+# once per bar: a buy and a "below the average" reading on the SAME bar must not sell it,
+# and a stock sold on a bar is not bought again on that same bar
+def st(sym, setups, bar):
+    return {**stock(sym, setups), "time": bar}
+
+
+s = scan_tr(None, [], T0)
+s = scan_tr(s, [st("JJJ", ["ema200_cross_up"], "2026-11-18 00:00")], T0 + timedelta(hours=1))
+assert len(s["open"]) == 1 and s["open"][0]["entry_bar"] == "2026-11-18 00:00"
+s = scan_tr(s, [st("JJJ", ["below_ema200"], "2026-11-18 00:00")], T0 + timedelta(hours=2))      # data jitter
+assert len(s["open"]) == 1, "sold on the bar it was bought"
+s = scan_tr(s, [st("JJJ", ["ema200_cross_up"], "2026-11-18 00:00")], T0 + timedelta(hours=3))
+assert len(s["open"]) == 1 and len(s["closed"]) == 0
+s = scan_tr(s, [st("JJJ", ["below_ema200"], "2026-11-19 00:00")], T0 + timedelta(days=1))       # next day: real exit
+assert len(s["open"]) == 0 and len(s["closed"]) == 1
+s = scan_tr(s, [st("JJJ", [], "2026-11-19 00:00")], T0 + timedelta(days=1, hours=1))
+s = scan_tr(s, [st("JJJ", ["ema200_cross_up"], "2026-11-19 00:00")], T0 + timedelta(days=1, hours=2))  # jitter back
+assert len(s["open"]) == 0, "bought again on the bar it was sold"
+s = scan_tr(s, [st("JJJ", [], "2026-11-20 00:00")], T0 + timedelta(days=2))
+s = scan_tr(s, [st("JJJ", ["ema200_cross_up"], "2026-11-21 00:00")], T0 + timedelta(days=3))    # a genuine new cross
+assert len(s["open"]) == 1
+
 print("All paper trading checks passed")

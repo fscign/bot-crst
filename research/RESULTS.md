@@ -120,8 +120,30 @@ names over a mostly rising decade, which flatters every number here.
 **Applied:** the stock paper account now trades the 200-day trend rule (US 0.75% risk, Europe 0.5%).
 The old score rules and the 4h rule were removed. Trades already open under the old rules run to their own exits.
 
+## Live check and fix (23 Nov 2026)
+
+After 10 days the stock paper account had closed 39 trades with 1 winner (balance 948). The trade list showed:
+1. **About 20 of the 39 were fake.** The 200-day exponential average was recomputed from a slightly different stretch
+   of Yahoo history on each scan, so a stock sitting close to its average flipped above and below it between scans.
+   Each flip bought or sold. Those trades closed at the entry price (about -0.01R each, fees only).
+2. **The engine acted on the same daily bar many times.** A daily rule must decide once per day.
+3. **Nine losers came from the old score rules** still open after the switch (about -32 USD of the -52), in a falling week.
+4. A volatility product (VXX) was in the stock list.
+
+Fixes: the 200-day rule now uses the simple average (it depends only on the last 200 closes), decisions are taken at
+most once per daily bar, a stock is never sold on the bar it was bought or bought again on the bar it was sold, and
+ETNs and leveraged or volatility products are filtered out of the stock list.
+
+The research was re-run with whipsaw-resistant variants (`stock_trades.csv`, `stock_efficiency.csv`). Requiring
+**two closes in a row** above the 200-day simple average to buy, and two below to sell, beat the deployed rule in every
+period in both markets: US +0.64R, +0.60R, +0.45R per trade (old rule +0.23R, +0.26R, +0.22R), Europe +0.31R, +0.85R,
++0.51R; about half as many trades; about 24% winners instead of 20%. This variant was chosen with all three periods in
+view, so it is less proven than the earlier holdout results, but it is consistent everywhere and matches the live problem.
+Even so, about 3 of 4 trades are expected to lose: a run of losses is normal for this rule; 1 in 39 was not.
+
 ## What the bot does with this
-- **Stock account:** the 200-day trend rule from round 4, without leverage, total exposure capped at 1.5x the account.
+- **Stock account:** the 200-day trend rule with 2-day confirmation (simple average), without leverage, total exposure capped at 1.5x the account.
+- **Telegram accounts:** one per channel listed in `scanner/config.json` (`telegram.channels`), copying its signals.
 - **Crypto account (experiment):** daily volatility breakouts on the 80 most traded coins, only while Bitcoin is
   higher than 30 days ago (rounds 2 and 3). Expect roughly break-even.
 - **Self-check:** the research re-runs on the 1st of every month. A rule whose kind of trade no longer shows a profit

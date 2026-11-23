@@ -61,15 +61,15 @@
     },
     "rules": [
       {
-        "name": "US stocks, 200-day trend",
+        "name": "US stocks, 200-day trend (2-day confirmation)",
         "markets": [
           "us"
         ],
         "tf": "1d",
         "side": "long",
-        "trigger": "ema200_cross_up",
+        "trigger": "sma200_confirm2_up",
         "exit": "hold",
-        "exit_setup": "below_ema200",
+        "exit_setup": "below_sma200_2d",
         "stop_atr": 3.0,
         "trail_atr": 0,
         "flip_exit": false,
@@ -79,19 +79,19 @@
           "us",
           "1d",
           "long",
-          "ema200_trend/signal"
+          "sma200_confirm2/signal"
         ]
       },
       {
-        "name": "European stocks, 200-day trend",
+        "name": "European stocks, 200-day trend (2-day confirmation)",
         "markets": [
           "eu"
         ],
         "tf": "1d",
         "side": "long",
-        "trigger": "ema200_cross_up",
+        "trigger": "sma200_confirm2_up",
         "exit": "hold",
-        "exit_setup": "below_ema200",
+        "exit_setup": "below_sma200_2d",
         "stop_atr": 3.0,
         "trail_atr": 0,
         "flip_exit": false,
@@ -101,7 +101,7 @@
           "eu",
           "1d",
           "long",
-          "ema200_trend/signal"
+          "sma200_confirm2/signal"
         ]
       }
     ],
@@ -142,7 +142,20 @@
       }
     },
     "title": "Stocks (200-day trend)",
-    "intro": "Trades the stock rule that did best in the 10-year research: be in a stock while it is above its 200-day average. Expect about 1 winning trade in 5: many small losses, a few large gains."
+    "intro": "Holds a stock while it is in a long-term uptrend: buys after two daily closes above its 200-day average, sells after two closes below. Expect about 1 winning trade in 4: many small losses, a few large gains."
   },
-  "context_note": "Tested on 7 years of crypto trades: only one of these conditions made a consistent difference. Breakout trades opened while Bitcoin was lower than 30 days earlier lost money in every period, so the experimental crypto account waits. Fear & Greed, the S&P 500, the dollar, yields and stablecoin supply did not help reliably. They are shown for information."
+  "context_note": "Tested on 7 years of crypto trades: only one of these conditions made a consistent difference. Breakout trades opened while Bitcoin was lower than 30 days earlier lost money in every period, so the experimental crypto account waits. Fear & Greed, the S&P 500, the dollar, yields and stablecoin supply did not help reliably. They are shown for information.",
+  "telegram": {
+    "defaults": {
+      "risk_pct": 1.0,
+      "default_stop_pct": 5.0,
+      "max_position_pct": 50,
+      "max_exposure": 3.0,
+      "max_hold_days": 7,
+      "limit_hours": 24,
+      "max_signal_age_hours": 6,
+      "fee_pct": 0.05
+    },
+    "channels": []
+  }
 }

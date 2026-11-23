@@ -115,7 +115,9 @@ function tradeNotes(before, now) {
   const wasClosed = new Set((before.closed || []).map((t) => t.id));
   const out = [];
   for (const t of (now.open || []).filter((t) => !seen.has(t.id)).slice(0, 8)) {
-    out.push(`${tag} OPENED ${t.side.toUpperCase()} ${t.symbol} (${t.name}) ${t.tf} @ ${fmt(t.entry)}\n  size ${fmt(t.size0)} USD, risk ${fmt(t.risk)} USD, stop ${fmt(t.stop)} (trailing)\n  rule: ${t.rule}`);
+    const how = t.pending ? `LIMIT ORDER ${t.side.toUpperCase()} ${t.symbol} at ${fmt(t.limit)}` : `OPENED ${t.side.toUpperCase()} ${t.symbol} (${t.name}) ${t.tf === "tg" ? "" : t.tf + " "}@ ${fmt(t.entry)}`;
+    const tgts = (t.targets && t.targets.length) ? `, targets ${t.targets.map(fmt).join(" / ")}` : "";
+    out.push(`${tag} ${how}\n  size ${fmt(t.size0)} USD, risk ${fmt(t.risk)} USD, stop ${fmt(t.stop)}${t.stop_given === false ? " (none posted, default used)" : ""}${tgts}\n  rule: ${t.rule}`);
   }
   for (const t of (now.closed || []).filter((t) => !wasClosed.has(t.id)).slice(-8)) {
     out.push(`${tag} CLOSED ${t.symbol} ${t.tf} @ ${fmt(t.exit)}: ${t.pnl >= 0 ? "+" : ""}${t.pnl} USD (${t.r >= 0 ? "+" : ""}${t.r}R), ${t.reason}\n  balance ${fmt(t.balance)} USD`);

@@ -22,6 +22,14 @@ If someone proposes a new rule, the bar is: test it in `research/` on a bias-fre
 data, judge on the latest quarter, compare with **random entries using the same exit**, and measure profit **per day
 held**. Rules that only beat zero in a rising market are not an edge. Two earlier "winners" died on exactly these checks.
 
+## Telegram signal accounts
+`scanner/tg_signals.py` reads public channels from `https://t.me/s/<channel>` each scan, recognises signal posts
+(coin, long/short, entry, targets, stop, leverage) and trades each channel in its own paper account. Add or remove
+channels in `scanner/config.json`, `telegram.channels`, e.g. `{"channel": "name", "title": "Telegram: name"}`.
+Sizing and exits are in `telegram.defaults` (or per channel). The dashboard lists every recognised post and what the
+bot did with it; a post that should have been read but is missing from that list means the parser needs a new pattern
+(`parse_signal`, with examples in `tests/test_tg.py`). Private channels and groups cannot be read.
+
 ## Where things are set
 - `scanner/config.json`: everything tunable. `paper.rules` (stock account), `paper.accounts.crypto` (experiment),
   `account` (sizes shown on signal cards), `universe`, `context_note`.
@@ -55,6 +63,7 @@ held**. Rules that only beat zero in a rising market are not an edge. Two earlie
 
 ## Known limits
 - Free data: stock prices are delayed about 15 minutes; Binance futures data (funding) is blocked from GitHub's servers.
+- Daily rules must decide once per daily bar; the engine enforces this via the bar time (`entry_bar`, `last_exit_bar`). Use the simple 200-day average, not the exponential one: the exponential one depends on how much history was downloaded and flipped between scans in live use.
 - A stock that drops out of the daily stock list while held is no longer scanned, so its "close below the 200-day
   average" exit cannot fire. Its safety stop and time limit still apply.
 - Backtests ignore slippage and use today's liquid stocks (survivorship bias). Real results will be worse.

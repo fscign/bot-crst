@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import sys
 import time
@@ -32,6 +33,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import signal_bot as sb  # indicators, scoring, news, leverage (shared with the local version)
 import paper
+import tg_signals
 import context as ctxmod
 
 HERE = Path(__file__).resolve().parent
@@ -112,9 +114,13 @@ def crypto_frame(source: str, row: dict, tf: str) -> pd.DataFrame | None:
 # --------------------------------------------------------------------------
 # Stock data: Yahoo Finance in batches
 # --------------------------------------------------------------------------
+NOT_STOCKS = re.compile(r"\bETN\b|ipath|proshares|direxion|leveraged|inverse|ultra|vix|volatility|2x|3x", re.I)
+
+
 def load_stock_universe() -> dict[str, str]:
     """ticker -> name, from data/universe.json (US) and scanner/europe.txt."""
-    names = dict(json.loads((ROOT / "data" / "universe.json").read_text(encoding="utf-8")).get("us", {}))
+    names = {t: n for t, n in json.loads((ROOT / "data" / "universe.json").read_text(encoding="utf-8")).get("us", {}).items()
+             if not NOT_STOCKS.search(n) and t not in ("VXX", "UVXY", "SVXY", "VIXY")}
     for line in (HERE / "europe.txt").read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
@@ -201,6 +207,24 @@ def setups(d: pd.DataFrame) -> list[str]:
         out.append("ema200_cross_up")                 # just closed above its 200-bar average
     if last["close"] < ema200:
         out.append("below_ema200")
+    # 200-bar SIMPLE average: unlike the exponential one, it does not depend on how much history was
+    # downloaded, so it cannot flip from one scan to the next on the same closes
+    c = d["close"].values
+    if len(c) >= 203:
+        sma = pd.Series(c).rolling(200).mean().values
+        up = c > sma
+        if up[-1] and not up[-2]:
+            out.append("sma200_cross_up")
+        if up[-1] and up[-2] and not up[-3]:
+            out.append("sma200_confirm2_up")          # second close in a row above
+        if c[-1] < sma[-1]:
+            out.append("below_sma200")
+        if c[-1] < sma[-1] and c[-2] < sma[-2]:
+            out.append("below_sma200_2d")             # second close in a row below
+        if c[-1] > sma[-1] * 1.01 and not c[-2] > sma[-2] * 1.01:
+            out.append("sma200_buffer_up")
+        if c[-1] < sma[-1] * 0.99:
+            out.append("below_sma200_buffer")
     return out
 
 
@@ -522,6 +546,23 @@ def main() -> None:
                                                      paper.settings(cfg, acc), bars_fn, price_fn, context=flags)
             except Exception as e:                       # keep this account as it was, do not lose the others
                 print(f"Paper account '{name}' skipped this scan: {e}")
+                if extra_before.get(name):
+                    pstate["accounts"][name] = extra_before[name]
+        # Telegram channels: one account per channel
+        for ch in cfg.get("telegram", {}).get("channels", []):
+            name = "tg_" + ch["channel"]
+            try:
+                try:
+                    posts = [] if args.demo else tg_signals.fetch_posts(ch["channel"])
+                except Exception as e:
+                    print(f"Telegram channel @{ch['channel']} could not be read: {e}")
+                    posts = None
+                pstate["accounts"][name] = tg_signals.run_channel(extra_before.get(name), tg_signals.settings(cfg, ch),
+                                                                  bars_fn, price_fn, posts)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"Telegram account '{name}' skipped this scan: {e}")
                 if extra_before.get(name):
                     pstate["accounts"][name] = extra_before[name]
     except Exception as e:

@@ -32,7 +32,10 @@ UTC = timezone.utc
 TF = {"1h": timedelta(hours=1), "4h": timedelta(hours=4), "1d": timedelta(days=1)}
 VERSION = 2
 
-EXIT_TEXT = {"below_ema200": "closed below its 200-day average"}
+EXIT_TEXT = {"below_ema200": "closed below its 200-day average",
+             "below_sma200": "closed below its 200-day average",
+             "below_sma200_2d": "closed below its 200-day average two days in a row",
+             "below_sma200_buffer": "closed more than 1% below its 200-day average"}
 
 CONTEXT_LABELS = {
     "btc_above_ema100": "Bitcoin is above its 100-day average",
@@ -145,6 +148,8 @@ def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime, 
         it, rule = hits[key]
         if it["symbol"] in held:
             continue
+        if it.get("time") and it["time"] <= state.setdefault("last_exit_bar", {}).get(it["symbol"], ""):
+            continue                                      # sold on this same bar: wait for a new bar
         if not all((context or {}).get(flag) for flag in rule.get("requires", [])):
             continue                                      # the market conditions this rule needs are not met
         equity = equity_of(state)
@@ -170,6 +175,7 @@ def open_new(state: dict, items: list[dict], cfg: dict, price_now, t: datetime, 
             "partial_at": price + side * stop_dist if rule["exit"] == "partial" else None,
             "banked": 0.0, "best": price, "trail_atr": rule.get("trail_atr", cfg["trail_atr"]),
             "flip_exit": rule.get("flip_exit", True), "exit_setup": rule.get("exit_setup"),
+            "entry_bar": it.get("time", ""),
             "until": now_iso(t + TF[it["tf"]] * rule["max_hold_bars"]),
         }
         state["open"].append(tr)
@@ -219,15 +225,36 @@ def replay(state: dict, tr: dict, bars: pd.DataFrame, cfg: dict) -> tuple[str, f
     """Walk through 5-minute bars since the last check. Returns (reason, price, time) on exit."""
     side = 1 if tr["side"] == "long" else -1
     until = parse(tr["until"])
-    trail = tr.get("trail_atr", cfg["trail_atr"]) * tr["atr"]
+    trail = tr.get("trail_atr", cfg["trail_atr"]) * (tr.get("atr") or 0)
     for t, b in bars.iterrows():
         o, h, l, c = b["open"], b["high"], b["low"], b["close"]
         worst, best = (l, h) if side == 1 else (h, l)
+        if tr.get("pending"):                                  # limit order waiting for its price
+            lim = tr["limit"]
+            if (worst - lim) * side <= 0:
+                fill = min(o, lim) if side == 1 else max(o, lim)
+                tr.update(pending=False, entry=float(fill), best=float(fill), last=float(c),
+                          opened=now_iso(t.to_pydatetime()))
+            elif t.to_pydatetime() >= parse(tr["expires"]):
+                return "not filled", None, t
+            tr["checked"] = now_iso(t.to_pydatetime() + timedelta(minutes=5))
+            continue
         moved = tr["stop"] != tr["stop0"]
+        stop_reason = ("stop (moved to entry after target 1)" if tr.get("tp_hit") else
+                       "trailing stop" if moved else "stop")
         if (o - tr["stop"]) * side <= 0:                       # gap through the stop
-            return ("trailing stop" if moved else "stop"), o, t
+            return stop_reason, o, t
         if (worst - tr["stop"]) * side <= 0:                   # inside the bar: stop first (conservative)
-            return ("trailing stop" if moved else "stop"), tr["stop"], t
+            return stop_reason, tr["stop"], t
+        targets = tr.get("targets") or []
+        while tr.get("tp_hit", 0) < len(targets) and (best - targets[tr["tp_hit"]]) * side >= 0:
+            price = targets[tr["tp_hit"]]
+            tr["tp_hit"] = tr.get("tp_hit", 0) + 1
+            if tr["tp_hit"] == len(targets):
+                return f"all {len(targets)} targets hit", price, t
+            book(state, tr, 1 / len(targets), price)           # equal part off at each target
+            if tr["tp_hit"] == 1 and (tr["entry"] - tr["stop"]) * side > 0:
+                tr["stop"] = tr["entry"]                       # after target 1, risk nothing
         if tr["partial_at"] is not None and (best - tr["partial_at"]) * side >= 0:
             book(state, tr, 0.5, tr["partial_at"])             # half off at +1R, stop to break-even
             tr["partial_at"] = None
@@ -261,17 +288,32 @@ def update_open(state: dict, labels: dict, cfg: dict, bars_since, price_now, t: 
         if exit_ is None:
             lab = labels.get((tr["symbol"], tr["tf"]))
             side = 1 if tr["side"] == "long" else -1
-            if tr.get("flip_exit", True) and lab and ((side == 1 and "SELL" in lab) or (side == -1 and "BUY" in lab)):
+            if tr.get("pending"):
+                pass
+            elif tr.get("flip_exit", True) and lab and ((side == 1 and "SELL" in lab) or (side == -1 and "BUY" in lab)):
                 exit_ = (f"signal flipped to {lab}", price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
-            elif tr.get("exit_setup") and tr["exit_setup"] in (setups or {}).get((tr["symbol"], tr["tf"]), []):
+            elif tr.get("exit_setup") and tr["exit_setup"] in (setups or {}).get((tr["symbol"], tr["tf"]), ([], ""))[0] \
+                    and (not (setups or {}).get((tr["symbol"], tr["tf"]))[1] or not tr.get("entry_bar")
+                         or (setups or {}).get((tr["symbol"], tr["tf"]))[1] > tr["entry_bar"]):
+                # only on a LATER bar than the one it was bought on
                 exit_ = (EXIT_TEXT.get(tr["exit_setup"], tr["exit_setup"]),
                          price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
             elif t >= parse(tr["until"]):
                 exit_ = ("time limit", price_now(tr["symbol"], tr["kind"]) or tr["last"], t)
+        if exit_ is None and tr.get("pending") and t >= parse(tr["expires"]):
+            exit_ = ("not filled", None, t)
+        if exit_ and exit_[0] == "not filled":                 # cancelled order: no trade, no result
+            state.setdefault("cancelled", []).append({"symbol": tr["symbol"], "side": tr["side"], "rule": tr["rule"],
+                                                      "limit": tr.get("limit"), "time": now_iso(t)})
+            state["cancelled"] = state["cancelled"][-50:]
+            continue
         if exit_:
             reason, price, when = exit_
             when = when.to_pydatetime() if hasattr(when, "to_pydatetime") else when
             closed.append(settle(state, tr, float(price), reason, when, cfg))
+            bar = (setups or {}).get((tr["symbol"], tr["tf"]), ([], ""))[1]
+            if bar:
+                state.setdefault("last_exit_bar", {})[tr["symbol"]] = bar
         else:
             still.append(tr)
     state["open"] = still
@@ -286,11 +328,19 @@ def rules_text(cfg: dict) -> list[str]:
         how = (f"stop {stop:g} ATR, then trailing {trail:g} ATR behind the best price, no profit target"
                if r["exit"] == "trail" else
                f"half is sold at +1R and the stop moves to the entry price, the rest trails {trail:g} ATR")
-        if r.get("exit_setup") == "below_ema200":
-            how = (f"sell when the daily close falls below the 200-day average; safety stop {stop:g} ATR below "
-                   f"the entry price; no profit target")
-        if r.get("trigger") == "ema200_cross_up":
-            entry = "enter when the daily close crosses above the stock's 200-day average"
+        exits = {"below_ema200": "the daily close falls below the 200-day average",
+                 "below_sma200": "the daily close falls below the 200-day simple average",
+                 "below_sma200_2d": "the daily close is below the 200-day simple average two days in a row",
+                 "below_sma200_buffer": "the daily close falls more than 1% below the 200-day simple average"}
+        if r.get("exit_setup") in exits:
+            how = (f"sell when {exits[r['exit_setup']]} (checked once per day, never on the day of purchase); "
+                   f"safety stop {stop:g} ATR below the entry price; no profit target")
+        entries = {"ema200_cross_up": "the daily close crosses above the stock's 200-day average",
+                   "sma200_cross_up": "the daily close crosses above the stock's 200-day simple average",
+                   "sma200_confirm2_up": "the stock closes above its 200-day simple average two days in a row",
+                   "sma200_buffer_up": "the daily close rises more than 1% above the 200-day simple average"}
+        if r.get("trigger") in entries:
+            entry = "enter when " + entries[r["trigger"]]
         elif r.get("trigger", "tech") == "vol_breakout":
             entry = ("enter after a bar more than twice its normal range that closes near its high, "
                      "above the 50-bar average")
@@ -320,7 +370,7 @@ def run(state: dict | None, items: list[dict], labels: dict, cfg: dict, bars_sin
     t = t or datetime.now(UTC)
     if not state or "balance" not in state or state.get("version") != VERSION:
         state = fresh_state(cfg, (state or {}).get("epoch"))
-    setups = {(it["symbol"], it["tf"]): it.get("setups", []) for it in items}
+    setups = {(it["symbol"], it["tf"]): (it.get("setups", []), it.get("time", "")) for it in items}
     closed = update_open(state, labels, cfg, bars_since, price_now, t, setups)
     opened = open_new(state, items, cfg, price_now, t, context)
     for tr in state["open"]:
