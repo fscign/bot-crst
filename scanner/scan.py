@@ -548,14 +548,26 @@ def main() -> None:
                 print(f"Paper account '{name}' skipped this scan: {e}")
                 if extra_before.get(name):
                     pstate["accounts"][name] = extra_before[name]
-        # Telegram channels: one account per channel
-        for ch in cfg.get("telegram", {}).get("channels", []):
-            name = "tg_" + ch["channel"]
+        # Telegram channels: one account per channel. Numeric ids are private channels read through the
+        # reader account (TG_* secrets); names are public channels read from t.me/s/<name>.
+        channels = cfg.get("telegram", {}).get("channels", [])
+        reader = None
+        if not args.demo and any(str(ch["channel"]).lstrip("-").isdigit() for ch in channels):
+            reader = tg_signals.Reader()
+            if reader.error:
+                print(f"Telegram reader: {reader.error}")
+        for ch in channels:
+            name = "tg_" + str(ch["channel"]).lstrip("-")
             try:
                 try:
-                    posts = [] if args.demo else tg_signals.fetch_posts(ch["channel"])
+                    if args.demo:
+                        posts = []
+                    elif str(ch["channel"]).lstrip("-").isdigit():
+                        posts = reader.posts(int(ch["channel"]))
+                    else:
+                        posts = tg_signals.fetch_posts(ch["channel"])
                 except Exception as e:
-                    print(f"Telegram channel @{ch['channel']} could not be read: {e}")
+                    print(f"Telegram channel {ch.get('name', ch['channel'])} could not be read: {e}")
                     posts = None
                 pstate["accounts"][name] = tg_signals.run_channel(extra_before.get(name), tg_signals.settings(cfg, ch),
                                                                   bars_fn, price_fn, posts)
@@ -565,6 +577,8 @@ def main() -> None:
                 print(f"Telegram account '{name}' skipped this scan: {e}")
                 if extra_before.get(name):
                     pstate["accounts"][name] = extra_before[name]
+        if reader is not None:
+            reader.close()
     except Exception as e:
         import traceback
         traceback.print_exc()

@@ -24,3 +24,6 @@ jobs:
         env:
           DASH_URL: https://${{ secrets.DASH_DOMAIN || vars.DASH_DOMAIN }}
           INGEST_TOKEN: ${{ secrets.INGEST_TOKEN }}
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TG_SESSION: ${{ secrets.TG_SESSION }}

@@ -156,6 +156,17 @@
       "max_signal_age_hours": 6,
       "fee_pct": 0.05
     },
-    "channels": []
+    "channels": [
+      {
+        "channel": "-1001299359703",
+        "name": "Miloslavski",
+        "title": "Telegram: Miloslavski"
+      },
+      {
+        "channel": "-1002106711314",
+        "name": "the 📈 channel",
+        "title": "Telegram: 📈"
+      }
+    ]
   }
 }

@@ -74,6 +74,50 @@ def parse_page(page: str, channel: str = "") -> list[dict]:
     return sorted(posts, key=lambda p: p["id"])
 
 
+class Reader:
+    """Reads channels as a logged-in Telegram account (needed for private channels).
+    Uses the secrets TG_API_ID, TG_API_HASH and TG_SESSION. One connection per scan."""
+
+    def __init__(self):
+        import os
+        self.client, self.error = None, None
+        api_id, api_hash, session = (os.environ.get(k, "") for k in ("TG_API_ID", "TG_API_HASH", "TG_SESSION"))
+        if not (api_id and api_hash and session):
+            self.error = "TG_API_ID, TG_API_HASH or TG_SESSION is not set"
+            return
+        try:
+            from telethon.sync import TelegramClient
+            from telethon.sessions import StringSession
+            self.client = TelegramClient(StringSession(session), int(api_id), api_hash)
+            self.client.connect()
+            if not self.client.is_user_authorized():
+                self.error = "the Telegram login (TG_SESSION) is no longer valid; make a new one"
+                self.client.disconnect()
+                self.client = None
+                return
+            self.chats = {d.id: d.entity for d in self.client.get_dialogs() if d.is_channel or d.is_group}
+        except Exception as e:
+            self.error = f"could not log in to Telegram: {e}"
+            self.client = None
+
+    def posts(self, chat_id: int, limit: int = 30) -> list[dict]:
+        if self.client is None:
+            raise RuntimeError(self.error)
+        entity = self.chats.get(chat_id)
+        if entity is None:
+            raise RuntimeError(f"the reader account is not a member of channel {chat_id}")
+        out = []
+        for m in self.client.get_messages(entity, limit=limit):
+            text = (m.message or "").strip()
+            if text:
+                out.append({"id": m.id, "time": m.date.astimezone(UTC), "text": text, "channel": str(chat_id)})
+        return sorted(out, key=lambda p: p["id"])
+
+    def close(self):
+        if self.client is not None:
+            self.client.disconnect()
+
+
 # --------------------------------------------------------------------------
 # Understanding a post
 # --------------------------------------------------------------------------
@@ -163,15 +207,16 @@ def settings(main_cfg: dict, channel: dict) -> dict:
     tg = {**DEFAULTS, **main_cfg.get("telegram", {}).get("defaults", {}), **channel}
     tg["fee_pct"] = {"crypto": tg["fee_pct"], "us": tg["fee_pct"], "eu": tg["fee_pct"]}
     tg["title"] = channel.get("title") or f"Telegram: {channel['channel']}"
-    tg.update(intro=f"Trades the signals posted in the Telegram channel @{channel['channel']}.",
+    tg["display"] = channel.get("name") or f"@{channel['channel']}"
+    tg.update(intro=f"Trades the signals posted in the Telegram channel {tg['display']}.",
               rules=[], keep_closed=300, trail_atr=0, stop_atr=2.0, max_exposure=tg["max_exposure"])
     return tg
 
 
 def rules_text(cfg: dict) -> list[str]:
     return [
-        f"Start: {cfg['start_balance']:,.0f} USD. Copies every signal posted in the public Telegram channel "
-        f"@{cfg['channel']} (read from t.me/s/{cfg['channel']} at each scan, every 15 minutes).",
+        f"Start: {cfg['start_balance']:,.0f} USD. Copies every signal posted in the Telegram channel "
+        f"{cfg['display']} (read at each scan, every 15 minutes). Signals posted only as pictures cannot be read.",
         "Entry at the live price when it is inside or better than the posted entry zone; otherwise a limit order at "
         f"the zone, cancelled after {cfg['limit_hours']} hours. Skipped if the price already passed the first target "
         f"or the post is older than {cfg['max_signal_age_hours']} hours.",
@@ -207,7 +252,7 @@ def open_trade(state: dict, sig: dict, post: dict, cfg: dict, price: float, t: d
     if notional < 5 or exposure + notional > equity * cfg["max_exposure"]:
         return None, "account fully in use"
     tr = {"id": uuid.uuid4().hex[:8], "symbol": sig["symbol"], "name": sig["symbol"][:-4], "kind": "crypto", "tf": "tg",
-          "side": sig["side"], "rule": f"@{cfg['channel']} post {post['id']}", "label": "TELEGRAM", "score": 0,
+          "side": sig["side"], "rule": f"{cfg['display']} post {post['id']}", "label": "TELEGRAM", "score": 0,
           "opened": paper.now_iso(t), "checked": paper.now_iso(t), "entry": entry, "last": price,
           "notional": round(notional, 2), "size0": round(notional, 2), "margin": round(notional, 2), "lev": 1,
           "channel_lev": sig["leverage"], "risk": round(notional * stop_frac, 2), "atr": 0, "fee_pct": cfg["fee_pct"]["crypto"],
@@ -238,7 +283,8 @@ def run_channel(state: dict | None, cfg: dict, bars_since, price_now, posts: lis
                 continue
             sig = parse_signal(post["text"])
             log = {"post": post["id"], "time": paper.now_iso(post["time"]), "text": post["text"][:300]}
-            if sig is None:
+            if sig is None:                              # kept so unreadable formats can be spotted and added
+                state["unread"] = (state.get("unread", []) + [log])[-15:]
                 continue
             log.update(symbol=sig["symbol"], side=sig.get("side"), action=sig["action"])
             if t - post["time"] > timedelta(hours=cfg["max_signal_age_hours"]):
@@ -273,6 +319,6 @@ def run_channel(state: dict | None, cfg: dict, bars_since, price_now, posts: lis
     st["max_dd_pct"] = round(max(st["max_dd_pct"], (1 - equity / st["peak"]) * 100), 2)
     state.update(equity=equity, updated=paper.now_iso(t), title=cfg["title"], rules_text=rules_text(cfg),
                  curve=(state.get("curve", []) + [[paper.now_iso(t)[:16], equity]])[-700:])
-    print(f"Telegram @{cfg['channel']}: open {len(state['open'])}, closed {st['trades']}, "
+    print(f"{cfg['title']}: open {len(state['open'])}, closed {st['trades']}, "
           f"equity {equity:.2f}{', FEED UNAVAILABLE' if posts is None else ''}")
     return state
