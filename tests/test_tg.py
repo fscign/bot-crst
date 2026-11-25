@@ -151,4 +151,14 @@ assert abs(tr["stop"] - 3020 * 1.05) < 1e-6 and tr["stop_given"] is False
 tr, msg = tg.open_trade(paper.fresh_state(PC), sig, {"id": 2, "time": T0}, {**PC, "display": "pics"}, 2940.0, T0)
 assert tr is None and msg == "price already past target 1"
 
+# catch-up: when picture reading starts, a recent screenshot already passed as text is read once
+acc = paper.fresh_state(PC)
+acc["tg_last"] = {"A": 10}
+pic_post = {"id": 9, "time": T0 - timedelta(hours=1), "text": "присоединяйтесь" + tg.PICTURE + shot, "channel": "A"}
+old_post = {"id": 8, "time": T0 - timedelta(hours=9), "text": "join" + tg.PICTURE + shot.replace("ETH", "SOL"), "channel": "A"}
+tg.process_feed(acc, [("A", [old_post, pic_post])], {**PC, "display": "A"}, lambda s, k: 3020.0, T0)
+assert [x["symbol"] for x in acc["open"]] == ["ETHUSDT"] and acc["pictures_on"] is True
+tg.process_feed(acc, [("A", [old_post, pic_post])], {**PC, "display": "A"}, lambda s, k: 3020.0, T0)
+assert len(acc["signals"]) == 1                                   # not handled a second time
+
 print("All screenshot checks passed")

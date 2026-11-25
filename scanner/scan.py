@@ -569,7 +569,9 @@ def main() -> None:
                         posts = []
                     elif str(ch["channel"]).lstrip("-").isdigit():
                         posts = reader.posts(int(ch["channel"]),
-                                             read_pictures_after=target.get("tg_last", {}).get(label))
+                                             read_pictures_after=(0 if not target.get("pictures_on") and label
+                                                                  in target.get("tg_last", {})
+                                                                  else target.get("tg_last", {}).get(label)))
                     else:
                         posts = tg_signals.fetch_posts(ch["channel"])
                     kinds = [(tg_signals.parse_signal(x["text"]) or {}).get("action") for x in posts]

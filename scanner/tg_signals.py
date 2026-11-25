@@ -352,6 +352,7 @@ def process_feed(state: dict, feed: list[tuple[str, list[dict] | None]], cfg: di
     state.setdefault("signals", [])
     state["tg"] = True
     errors = []
+    catch_up = not state.get("pictures_on")              # once, when picture reading starts: re-read recent posts
     for chan, posts in feed:
         if posts is None:
             errors.append(chan)
@@ -360,10 +361,14 @@ def process_feed(state: dict, feed: list[tuple[str, list[dict] | None]], cfg: di
             last[chan] = max((p["id"] for p in posts), default=0)
             continue
         for post in posts:
-            if post["id"] <= last[chan]:
+            recent_pic = catch_up and PICTURE in post["text"] and \
+                t - post["time"] <= timedelta(hours=cfg["max_signal_age_hours"])
+            if post["id"] <= last[chan] and not recent_pic:
                 continue
             _handle_post(state, post, chan, cfg, price_now, t)
         last[chan] = max([last[chan]] + [p["id"] for p in posts])
+    if feed and not errors:
+        state["pictures_on"] = True
     if errors:
         state["feed_error"] = paper.now_iso(t)
         state["feed_error_channels"] = errors
