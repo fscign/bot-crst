@@ -22,13 +22,13 @@ If someone proposes a new rule, the bar is: test it in `research/` on a bias-fre
 data, judge on the latest quarter, compare with **random entries using the same exit**, and measure profit **per day
 held**. Rules that only beat zero in a rising market are not an edge. Two earlier "winners" died on exactly these checks.
 
-## Telegram signal accounts
-`scanner/tg_signals.py` reads public channels from `https://t.me/s/<channel>` each scan, recognises signal posts
-(coin, long/short, entry, targets, stop, leverage) and trades each channel in its own paper account. Add or remove
-channels in `scanner/config.json`, `telegram.channels`, e.g. `{"channel": "name", "title": "Telegram: name"}`.
-Sizing and exits are in `telegram.defaults` (or per channel). The dashboard lists every recognised post and what the
-bot did with it; a post that should have been read but is missing from that list means the parser needs a new pattern
-(`parse_signal`, with examples in `tests/test_tg.py`). Private channels and groups cannot be read.
+## Telegram signals
+`scanner/tg_signals.py` reads the channels listed in `scanner/config.json` (`telegram.channels`) at every scan and copies
+their signals into the account named in `telegram.account` (the crypto account), all channels as one feed. Numeric
+channel ids are private channels read through a reader account (Telethon, secrets `TG_API_ID`, `TG_API_HASH`,
+`TG_SESSION`); names are public channels read from `https://t.me/s/<name>`. If Telegram logs the reader out, the scan
+log says "TG_SESSION is no longer valid": make a new session string with the small script in the chat history
+(Telethon `StringSession`) and replace the secret. The dashboard lists recognised posts and the posts it could not read.
 
 ## Where things are set
 - `scanner/config.json`: everything tunable. `paper.rules` (stock account), `paper.accounts.crypto` (experiment),

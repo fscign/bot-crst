@@ -11,7 +11,63 @@ This repo holds two independent tools. Ask which one is meant if it is unclear, 
 | Trading signal bot (crypto and stocks) | `scanner/`, `worker/`, `research/`, `data/`, `scan.yml`, `deploy.yml`, `research*.yml`, `universe.yml`, `diagnose.yml` | `README.md`, `MAINTENANCE.md` |
 | **Odds watch** (sports betting value bets and arbitrage) | `odds/`, `odds-worker/`, `tests/test_odds.py`, `tests/odds_fixture.json`, `odds-scan.yml`, `odds-deploy.yml` | `odds/README.md` |
 
-The rest of this file is about Odds watch.
+The trading bot section comes first, then Odds watch.
+
+# Trading signal bot
+
+Read `MAINTENANCE.md` (how it works, upkeep) and `research/RESULTS.md` (what was tested and why the rules are what they
+are) before changing anything. A signal and paper-trading bot: it never places real trades.
+
+## How it runs
+- **Scanner** (`scanner/scan.py`) in GitHub Actions (`scan.yml`), started every 15 minutes by the dashboard Worker's
+  cron through the GitHub API (`GH_DISPATCH_TOKEN`); hourly GitHub schedule as fallback. Scores about 170 crypto
+  pairs and about 700 US and European stocks on 1h, 4h and 1d, gathers market context (`scanner/context.py`), runs
+  the paper accounts (`scanner/paper.py`), reads Telegram (`scanner/tg_signals.py`) and posts everything to the dashboard.
+- **Dashboard** (`worker/`, Cloudflare Worker `bot-crst`, KV) at `https://bot-crst.ahorsun.workers.dev`, password
+  `DASH_PASSWORD`. Paper state is in KV key `paper`; the scanner reads it via `/api/paper` and posts back to `/api/ingest`
+  with `INGEST_TOKEN`. Also: real-position tracking checked every minute, Telegram alerts for every paper trade, a
+  weekly report (Sundays 17:00 UTC) and a warning if no scan arrives for 3 hours.
+- **Research** (`research/`) re-runs monthly (1st of the month); `pause_stale_rules()` pauses a paper rule whose kind
+  of trade no longer shows a profit.
+- `diagnose.yml` (run by hand) prints all paper trades to its log; use it to investigate results. Repo and logs are
+  PUBLIC: never print Telegram post text or secrets in logs (counts only).
+
+## Paper accounts (all rules in `scanner/config.json`)
+1. **Stocks (200-day trend)**: buy after 2 daily closes above the 200-day SIMPLE average, sell after 2 closes below.
+   US risk 0.75% per trade, Europe 0.5%, no leverage. Reset by Aleksandrs on 23 Nov 2026 after the fix below.
+   On 25 Nov: 18 open trades, equity 1,017. Expect about 1 winner in 4.
+2. **Crypto (bot rule + Telegram)**, one account, two sources, dashboard shows results by source:
+   - Bot rule (experiment): daily volatility breakout on the top 80 coins, only while Bitcoin is higher than 30 days
+     ago (`btc_30d_up`). That gate has been False since mid-November, so no rule trades; this is intended.
+   - Telegram feed: the owner's two channels by the same author, read as ONE feed (a coin posted in both opens one
+     trade): `-1001299359703` "Miloslavski" and `-1002106711314` "📈". Private, so read through a separate reader
+     account (Telethon; secrets `TG_API_ID`, `TG_API_HASH`, `TG_SESSION`) that Aleksandrs set up on a spare SIM.
+     Trades: entry in zone or limit order (24 h), 1% risk to the posted stop (5% default), equal part off at each
+     target, stop to entry after target 1, 7-day limit, "close" posts honoured.
+
+## Open issue (start here)
+**The reader recognises 0 of about 50 recent posts in the two channels as signals** (scan log line
+"Telegram ...: N recent posts read, 0 look like trade signals"). English and Russian formats are supported
+(`parse_signal`, examples in `tests/test_tg.py`). Either the author's posts are not signals, his signals are pictures,
+or his format is new. Aleksandrs was asked to paste 2 or 3 real signal posts; when he does, add the format to
+`parse_signal` with a test. New unread posts are listed on the dashboard ("Posts the bot could not read as a signal").
+
+## Lessons that must not be lost
+- Live bug (Nov 2026): the 200-day EXPONENTIAL average depended on how much history Yahoo returned, so it flipped
+  between scans and created ~20 fake trades. Daily rules must use stable inputs and decide once per daily bar
+  (`entry_bar`, `last_exit_bar` in `paper.py`). Never sell on the purchase bar or rebuy on the sale bar.
+- Test new rules in `research/`: choose on older data, judge on the latest quarter, compare with random entries using
+  the same exit, measure profit per day held. Two earlier "winners" failed exactly these checks. No rule predicts crypto.
+- Aleksandrs wants a profitable, smart bot; be honest that nothing here has been shown to beat an index fund.
+
+## Working on it
+- `python tests/test_paper.py` and `python tests/test_tg.py` after every change (no network).
+- `python scanner/scan.py --demo` runs offline on random data. `cd worker && npx wrangler dev --local` (needs
+  `worker/.dev.vars` with `INGEST_TOKEN` and `DASH_PASSWORD`) serves the dashboard locally. Delete `data/paper.json`,
+  `data/latest.json` and `.wrangler` afterwards.
+- Push to `main`; the dashboard deploys itself (`deploy.yml`). To test a scan: run "Scan markets" and read its log.
+
+# Odds watch
 
 ## Odds watch: what it is
 
