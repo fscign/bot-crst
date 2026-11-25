@@ -127,3 +127,28 @@ assert acc["feed_error_channels"] == ["A"] and len(acc["open"]) == 1
 assert "both channels" in tg.feed_rules_text(FC)[0] and "A and B" in tg.feed_rules_text(FC)[0]
 
 print("All Telegram signal checks passed")
+
+# ---- position screenshots (text as read by scanner/ocr.py; numbers made up)
+shot = ("Positions(1) OpenOrders(1)\nCurrent pair Close All\nETHUSDT PnL (USDT)\nShort Isolated 20x +312.5 (+4.10%)\n"
+        "Position（USDT）一 Margin(USDT) Risk\n50,000.00 2,500.00 3.10%\nEntryPrice= Mark Price Est.Liq.Price\n"
+        "3,050.5 3,020.1 3,190.4\nTP/SL Entire p0sition: 2,950.0/--\nRealizedPnL(USDT) -12.5\nSet TP/SL Close Flash close")
+s = tg.parse_signal("присоединяйтесь" + tg.PICTURE + shot)
+assert s == {"action": "open", "symbol": "ETHUSDT", "side": "short", "entry_low": 3050.5, "entry_high": 3050.5,
+             "targets": [2950.0], "stop": None, "leverage": 20, "market": True, "picture": True}, s
+s = tg.parse_signal("" + tg.PICTURE + shot.replace("Short", "Long").replace("2,950.0/--", "3,200.0/2,990.0"))
+assert s["side"] == "long" and s["targets"] == [3200.0] and s["stop"] == 2990.0, s
+s = tg.parse_signal("Join" + tg.PICTURE + "BTCUSDT\nLong Cross 5x\nEntry Price Mark Price\n90,100.0 90,500.0\nTP/SL --/--")
+assert s["entry_low"] == 90100 and s["targets"] == [] and s["stop"] is None and s["leverage"] == 5, s
+assert tg.parse_signal("" + tg.PICTURE + "SOLUSDT Short\nClosed PnL +1,180.17\nClose Price 71.000")["action"] == "close"
+assert tg.parse_signal("Nice day" + tg.PICTURE + "a photo of the sea") is None
+# a copied position is joined at the live price, even when that is past the author's entry
+PC = tg.settings({"telegram": {}}, {"channel": "pics", "fee_pct": 0.0})
+acc = paper.fresh_state(PC)
+sig = tg.parse_signal("присоединяйтесь" + tg.PICTURE + shot)
+tr, msg = tg.open_trade(acc, sig, {"id": 1, "time": T0}, {**PC, "display": "pics"}, 3020.0, T0)
+assert msg == "opened" and tr["entry"] == 3020.0 and not tr.get("pending") and tr["targets"] == [2950.0]
+assert abs(tr["stop"] - 3020 * 1.05) < 1e-6 and tr["stop_given"] is False
+tr, msg = tg.open_trade(paper.fresh_state(PC), sig, {"id": 2, "time": T0}, {**PC, "display": "pics"}, 2940.0, T0)
+assert tr is None and msg == "price already past target 1"
+
+print("All screenshot checks passed")

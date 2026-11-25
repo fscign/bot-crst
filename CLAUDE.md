@@ -45,12 +45,16 @@ are) before changing anything. A signal and paper-trading bot: it never places r
      Trades: entry in zone or limit order (24 h), 1% risk to the posted stop (5% default), equal part off at each
      target, stop to entry after target 1, 7-day limit, "close" posts honoured.
 
-## Open issue (start here)
-**The reader recognises 0 of about 50 recent posts in the two channels as signals** (scan log line
-"Telegram ...: N recent posts read, 0 look like trade signals"). English and Russian formats are supported
-(`parse_signal`, examples in `tests/test_tg.py`). Either the author's posts are not signals, his signals are pictures,
-or his format is new. Aleksandrs was asked to paste 2 or 3 real signal posts; when he does, add the format to
-`parse_signal` with a test. New unread posts are listed on the dashboard ("Posts the bot could not read as a signal").
+## How the author posts signals (solved 25 Nov 2026)
+His signals are **screenshots of his own open position** in an exchange app (coin, Short/Long, leverage, Entry Price,
+Mark Price, Est. Liq. Price, "TP/SL Entire position: 71.000/--"), with a short caption such as "присоединяйтесь"
+("join in"). Text-only posts are commentary. The reader downloads pictures of NEW posts, reads them with RapidOCR
+(`scanner/ocr.py`, pip `rapidocr-onnxruntime`) and `parse_position_screenshot` turns them into a signal that is joined
+at the live price (`market: True`). No stop in his screenshots usually, so the 5% default stop applies.
+Check after the next posts: the scan log line "(N new pictures read), M look like trade signals", and on the dashboard
+the "Telegram signals seen" and "Posts the bot could not read" lists. If his app shows a closed-position screenshot,
+`parse_position_screenshot` treats "Closed"/"Close price" without "Mark Price" as a close instruction; confirm with a
+real example when one appears. Never commit his screenshots or their text to this public repo.
 
 ## Lessons that must not be lost
 - Live bug (Nov 2026): the 200-day EXPONENTIAL average depended on how much history Yahoo returned, so it flipped

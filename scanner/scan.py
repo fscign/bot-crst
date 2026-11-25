@@ -568,12 +568,14 @@ def main() -> None:
                     if args.demo:
                         posts = []
                     elif str(ch["channel"]).lstrip("-").isdigit():
-                        posts = reader.posts(int(ch["channel"]))
+                        posts = reader.posts(int(ch["channel"]),
+                                             read_pictures_after=target.get("tg_last", {}).get(label))
                     else:
                         posts = tg_signals.fetch_posts(ch["channel"])
                     kinds = [(tg_signals.parse_signal(x["text"]) or {}).get("action") for x in posts]
-                    print(f"Telegram {label}: {len(posts)} recent posts read, {kinds.count('open')} look like "
-                          f"trade signals, {kinds.count('close')} like close instructions")
+                    pics = sum(tg_signals.PICTURE in x["text"] for x in posts)
+                    print(f"Telegram {label}: {len(posts)} recent posts read ({pics} new pictures read), "
+                          f"{kinds.count('open')} look like trade signals, {kinds.count('close')} like close instructions")
                 except Exception as e:
                     print(f"Telegram channel {label} could not be read: {e}")
                     posts = None

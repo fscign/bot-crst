@@ -100,15 +100,28 @@ class Reader:
             self.error = f"could not log in to Telegram: {e}"
             self.client = None
 
-    def posts(self, chat_id: int, limit: int = 30) -> list[dict]:
+    def posts(self, chat_id: int, limit: int = 30, read_pictures_after: int | None = None) -> list[dict]:
+        """Recent posts. Pictures of posts newer than read_pictures_after are read with OCR and their text
+        appended after PICTURE (None: pictures are not read, e.g. on the first look at a channel)."""
         if self.client is None:
             raise RuntimeError(self.error)
         entity = self.chats.get(chat_id)
         if entity is None:
             raise RuntimeError(f"the reader account is not a member of channel {chat_id}")
         out = []
+        self.pictures_read = getattr(self, "pictures_read", 0)
         for m in self.client.get_messages(entity, limit=limit):
             text = (m.message or "").strip()
+            is_pic = bool(m.photo) or bool(m.document and (m.document.mime_type or "").startswith("image/"))
+            if is_pic and read_pictures_after is not None and m.id > read_pictures_after:
+                try:
+                    import ocr
+                    pic = ocr.read_image(self.client.download_media(m, file=bytes))
+                    if pic:
+                        text = text + PICTURE + pic
+                        self.pictures_read += 1
+                except Exception as e:
+                    print(f"   a picture could not be read: {type(e).__name__}")
             if text:
                 out.append({"id": m.id, "time": m.date.astimezone(UTC), "text": text, "channel": str(chat_id)})
         return sorted(out, key=lambda p: p["id"])
@@ -166,8 +179,56 @@ def find_symbol(text: str) -> str | None:
     return None
 
 
+PICTURE = "\n[picture]\n"          # separates a post's own text from the text read out of its picture
+
+
+def parse_position_screenshot(pic: str) -> dict | None:
+    """A screenshot of an open position in an exchange app (as the author posts them):
+    coin, Short/Long, leverage, Entry Price (value on the line below its label), and the TP/SL line."""
+    low = pic.lower()
+    m = re.search(r"\b([A-Z0-9]{2,15})\s?/?\s?USDT\b", pic)
+    if not m or m.group(1) in NOT_COINS:
+        return None
+    sym = m.group(1) + "USDT"
+    has_mark = re.search(r"mark\s?price|маркиров|цена маркировки", low)
+    if not has_mark and re.search(r"\bclosed\b|close\s?price|closing\s?price|exit\s?price|цена закрытия|закрыт", low):
+        return {"action": "close", "symbol": sym}
+    side_m = re.search(r"\b(short|long|шорт|лонг)\b", low)
+    lines = pic.splitlines()
+    idx = next((i for i, ln in enumerate(lines)
+                if re.search(r"entry\s?price|avg\.?\s?(?:open|entry)|open\s?price|цена входа|цена открытия", ln.lower())), None)
+    if not side_m or idx is None or idx + 1 >= len(lines):
+        return None
+    label = lines[idx].lower()
+    found = [(label.find(k), k) for k in ("entry", "open", "вход", "mark", "маркир", "liq", "ликв") if label.find(k) >= 0]
+    order = [k for _, k in sorted(found)]
+    col = next((i for i, k in enumerate(order) if k in ("entry", "open", "вход")), 0)
+    vals = [_num(x) for x in re.findall(NUM, lines[idx + 1])]
+    if len(vals) <= col:
+        return None
+    side = "short" if side_m.group(1) in ("short", "шорт") else "long"
+    entry, sgn = vals[col], (1 if side == "long" else -1)
+    tp = sl = None
+    tpl = next((ln for ln in lines if re.search(r"tp\s?/\s?sl", ln.lower())), "")
+    pair = re.search(r"(\d[\d,]*(?:\.\d+)?|--)\s*/\s*(\d[\d,]*(?:\.\d+)?|--)", tpl)
+    if pair:
+        tp = _num(pair.group(1)) if pair.group(1) != "--" else None
+        sl = _num(pair.group(2)) if pair.group(2) != "--" else None
+    lev = re.search(r"\b(\d{1,3})\s?[xх]\b", pic)
+    return {"action": "open", "symbol": sym, "side": side, "entry_low": entry, "entry_high": entry,
+            "targets": [tp] if tp is not None and (tp - entry) * sgn > 0 else [],
+            "stop": sl if sl is not None and (entry - sl) * sgn > 0 else None,
+            "leverage": int(lev.group(1)) if lev else None, "market": True, "picture": True}
+
+
 def parse_signal(text: str) -> dict | None:
     """A trade signal, a close instruction, or None."""
+    if PICTURE in text:
+        caption, pic = text.split(PICTURE, 1)
+        shot = parse_position_screenshot(pic)
+        if shot:
+            return shot
+        text = caption + "\n" + pic
     sym = find_symbol(text)
     if not sym:
         return None
@@ -222,7 +283,7 @@ def settings(main_cfg: dict, channel: dict) -> dict:
 def rules_text(cfg: dict) -> list[str]:
     return [
         f"Start: {cfg['start_balance']:,.0f} USD. Copies every signal posted in the Telegram channel "
-        f"{cfg['display']} (read at each scan, every 15 minutes). Signals posted only as pictures cannot be read.",
+        f"{cfg['display']} (read at each scan, every 15 minutes). Screenshots of the author's own position are read from the picture.",
         "Entry at the live price when it is inside or better than the posted entry zone; otherwise a limit order at "
         f"the zone, cancelled after {cfg['limit_hours']} hours. Skipped if the price already passed the first target "
         f"or the post is older than {cfg['max_signal_age_hours']} hours.",
@@ -244,7 +305,8 @@ def open_trade(state: dict, sig: dict, post: dict, cfg: dict, price: float, t: d
     if targets and (price - targets[0]) * side >= 0:
         return None, "price already past target 1"
     zone_edge = hi if side == 1 else lo
-    pending = (price - zone_edge) * side > zone_edge * 0.003      # worse than the zone: wait for it
+    # copied open positions (screenshots) are joined at the live price; text signals wait for their zone
+    pending = not sig.get("market") and (price - zone_edge) * side > zone_edge * 0.003
     entry = zone_edge if pending else price
     stop, stop_given = sig["stop"], sig["stop"] is not None
     if not stop_given:
@@ -347,7 +409,8 @@ def feed_rules_text(cfg: dict) -> list[str]:
     lines = rules_text({**cfg, "display": cfg["display"]})
     lines[0] = (f"Telegram signals: every signal posted in {cfg['display']} is copied into this account, as one feed "
                 f"(a coin posted in both channels opens one trade). Read at each scan, every 15 minutes. "
-                f"Signals posted only as pictures cannot be read.")
+                f"His signals are screenshots of his own open position: the bot reads coin, side, entry, take-profit "
+                f"and stop from the picture and joins at the live price (unless the take-profit is already passed).")
     return lines
 
 
