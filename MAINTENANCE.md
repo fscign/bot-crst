@@ -27,8 +27,8 @@ held**. Rules that only beat zero in a rising market are not an edge. Two earlie
 their signals into the account named in `telegram.account` (the crypto account), all channels as one feed. Numeric
 channel ids are private channels read through a reader account (Telethon, secrets `TG_API_ID`, `TG_API_HASH`,
 `TG_SESSION`); names are public channels read from `https://t.me/s/<name>`. If Telegram logs the reader out, the scan
-log says "TG_SESSION is no longer valid": make a new session string with the small script in the chat history
-(Telethon `StringSession`) and replace the secret. The dashboard lists recognised posts and the posts it could not read.
+log says "TG_SESSION is no longer valid": make a new session string with `tools/make_tg_session.py`
+(run on the owner's computer) and replace the secret. The dashboard lists recognised posts and the posts it could not read.
 
 ## Where things are set
 - `scanner/config.json`: everything tunable. `paper.rules` (stock account), `paper.accounts.crypto` (experiment),
